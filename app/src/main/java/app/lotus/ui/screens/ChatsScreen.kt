@@ -39,13 +39,17 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
 data class ChatPreview(
@@ -125,7 +129,7 @@ fun ChatsScreen() {
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             itemsIndexed(sampleChats) { index, chat ->
-                var visible by remember { androidx.compose.runtime.mutableStateOf(false) }
+                var visible by remember { mutableStateOf(false) }
                 LaunchedEffect(Unit) {
                     delay(index * 60L)
                     visible = true
@@ -238,7 +242,3 @@ private fun ChatListItem(chat: ChatPreview) {
         }
     }
 }
-
-// Нужен импорт для sp
-private val androidx.compose.ui.unit.TextUnit.sp: androidx.compose.ui.unit.TextUnit
-    get() = this
