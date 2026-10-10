@@ -3,7 +3,7 @@ name: Build Lotus APK
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:  # позволяет запускать вручную
+  workflow_dispatch:
 
 jobs:
   build:
@@ -19,32 +19,39 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'tools platform-tools platforms;android-35 build-tools;35.0.0'
 
-      - name: Grant execute permission for gradlew
+      - name: Make gradlew executable
         run: |
-          if [ -f ./gradlew ]; then
-            chmod +x ./gradlew
-          else
-            echo "Creating Gradle Wrapper..."
-            gradle wrapper --gradle-version 8.9
-            chmod +x ./gradlew
+          chmod +x ./gradlew || true
+          # Если wrapper jar отсутствует — создаём его
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "Downloading gradle wrapper jar..."
+            mkdir -p gradle/wrapper
+            curl -sL -o gradle/wrapper/gradle-wrapper.jar https://github.com/gradle/gradle/raw/v8.9.0/gradle/wrapper/gradle-wrapper.jar || true
           fi
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: |
+          ./gradlew assembleDebug --stacktrace --no-daemon
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
-      - name: Upload APK as Artifact
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: Lotus-APK
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
 
-      - name: Create Release (on main)
-        if: github.ref == 'refs/heads/main'
+      - name: Create GitHub Release
+        if: success() && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
@@ -52,7 +59,7 @@ jobs:
           body: |
             Автоматическая сборка Lotus
             
-            Скачай файл `app-debug.apk` и установи на Android.
+            Скачай файл **app-debug.apk** и установи на Android.
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: true
