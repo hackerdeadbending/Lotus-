@@ -5,12 +5,14 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,60 +28,78 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
 @Composable
-fun SplashScreen(
-    onFinished: () -> Unit
-) {
-    val scale = remember { Animatable(0.6f) }
+fun SplashScreen(onFinished: () -> Unit) {
+    val scale = remember { Animatable(0.86f) }
     val alpha = remember { Animatable(0f) }
+    val colors = MaterialTheme.colorScheme
 
     LaunchedEffect(Unit) {
-        // Плавное появление
-        alpha.animateTo(1f, animationSpec = tween(800))
+        alpha.animateTo(1f, animationSpec = tween(650))
         scale.animateTo(
             targetValue = 1f,
             animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessLow
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMedium
             )
         )
-        delay(1400)
-        // Исчезновение
-        alpha.animateTo(0f, animationSpec = tween(500))
+        delay(1050)
+        alpha.animateTo(0f, animationSpec = tween(350))
         onFinished()
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(colors.background),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .scale(scale.value)
-                .alpha(alpha.value)
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.scale(scale.value).alpha(alpha.value)
         ) {
-            // Временная текстовая "иконка" лотоса (позже заменим на SVG)
-            Text(
-                text = "❀",
-                fontSize = 72.sp,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+            Box(
+                modifier = Modifier
+                    .size(104.dp)
+                    .background(colors.surface, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(76.dp)
+                        .background(colors.primaryContainer, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "❀",
+                        fontSize = 52.sp,
+                        color = colors.onPrimaryContainer
+                    )
+                }
+            }
+            Spacer(Modifier.height(26.dp))
             Text(
                 text = "Lotus",
-                style = MaterialTheme.typography.headlineLarge.copy(
+                style = MaterialTheme.typography.displaySmall.copy(
                     fontWeight = FontWeight.Light,
-                    letterSpacing = 4.sp
+                    letterSpacing = 3.sp
                 ),
-                color = MaterialTheme.colorScheme.onBackground
+                color = colors.onBackground
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(Modifier.height(9.dp))
             Text(
-                text = "тихо. безопасно. красиво",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "ТИШЕ. БЛИЖЕ. ЛИЧНОЕ.",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    letterSpacing = 2.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                color = colors.onSurfaceVariant
+            )
+            Spacer(Modifier.height(34.dp))
+            Box(
+                modifier = Modifier
+                    .size(width = 34.dp, height = 3.dp)
+                    .background(colors.secondary, CircleShape)
             )
         }
     }
