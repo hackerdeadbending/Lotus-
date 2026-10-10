@@ -6,6 +6,13 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
+private val ColorLightBackground = Color(0xFFF4F6F2)
+private val ColorLightSurface = Color(0xFFFFFFFF)
+private val ColorLightVariant = Color(0xFFE9EEE9)
+private val ColorLightText = Color(0xFF18221B)
+private val ColorLightMuted = Color(0xFF657168)
+private val ColorLightOutline = Color(0xFFD4DDD5)
+
 private val LightColorScheme = lightColorScheme(
     primary = LotusGreenDark,
     onPrimary = LotusCream,
@@ -43,13 +50,6 @@ private val DarkColorScheme = darkColorScheme(
     onSurfaceVariant = LotusTextSecondary,
     outline = LotusDivider
 )
-
-private val ColorLightBackground = Color(0xFFF4F6F2)
-private val ColorLightSurface = Color(0xFFFFFFFF)
-private val ColorLightVariant = Color(0xFFE9EEE9)
-private val ColorLightText = Color(0xFF18221B)
-private val ColorLightMuted = Color(0xFF657168)
-private val ColorLightOutline = Color(0xFFD4DDD5)
 
 @Composable
 fun LotusTheme(
