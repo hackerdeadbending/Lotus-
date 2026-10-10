@@ -92,6 +92,7 @@ private fun LotusApp() {
     )) {
         Surface(Modifier.fillMaxSize(), color = Ink) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars)) {
+                Box(Modifier.weight(1f)) {
                 when (page) {
                     "welcome" -> WelcomeScreen(profileName, { profileName = it }) {
                         if (profileName.trim().isNotEmpty()) {
@@ -140,8 +141,8 @@ private fun LotusApp() {
                         page = "welcome"
                     }
                 }
+                }
                 if (page == "chats" || page == "browser" || page == "privacy" || page == "settings") {
-                    Spacer(Modifier.weight(1f))
                     BottomNavigation(destinationName) { dest ->
                         destinationName = dest.label
                         page = when (dest) {
