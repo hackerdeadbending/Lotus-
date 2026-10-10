@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build APK
+    name: Build and install-test APK
     runs-on: ubuntu-latest
 
     steps:
@@ -42,11 +42,28 @@ jobs:
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace --no-daemon
 
-      - name: Verify APK
+      - name: Verify APK structure and signature
         run: |
-          test -s app/build/outputs/apk/debug/app-debug.apk
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
-          "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          ls -lh "$APK"
+          "${ANDROID_HOME}/build-tools/35.0.0/aapt" dump badging "$APK"
+          "${ANDROID_HOME}/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "${ANDROID_HOME}/build-tools/35.0.0/zipalign" -c -v 4 "$APK"
+
+      - name: Test installation and launch on Android 13
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            adb install app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n app.lotus/.MainActivity
+            sleep 3
+            adb shell pidof app.lotus
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -62,7 +79,7 @@ jobs:
         with:
           tag_name: v0.1.${{ github.run_number }}
           name: Lotus ${{ github.run_number }}
-          body: "Lotus Android UI prototype. This build does not yet implement end-to-end encryption or message delivery."
+          body: "Lotus Android UI prototype. This build passed APK structure/signature checks and an Android 13 emulator install/launch test. End-to-end encryption and message delivery are not implemented yet."
           files: app/build/outputs/apk/debug/app-debug.apk
           prerelease: true
         env:
