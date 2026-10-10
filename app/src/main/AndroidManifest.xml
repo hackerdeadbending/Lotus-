@@ -3,9 +3,9 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/ic_lotus"
         android:label="Lotus"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:roundIcon="@drawable/ic_lotus"
         android:supportsRtl="true"
         android:theme="@style/Theme.Lotus">
         <activity
