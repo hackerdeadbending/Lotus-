@@ -40,6 +40,22 @@ object LotusBackend {
         access to json.optString("refresh_token").takeIf { it.isNotBlank() }
     }
 
+    suspend fun sendEmailOtp(email: String): Result<Unit> = request(
+        path = "/auth/v1/otp",
+        method = "POST",
+        body = JSONObject().put("email", email.trim()).put("create_user", true)
+    ) { Unit }
+
+    suspend fun verifyEmailOtp(email: String, code: String): Result<Pair<String, String?>> = request(
+        path = "/auth/v1/verify",
+        method = "POST",
+        body = JSONObject().put("email", email.trim()).put("token", code.trim()).put("type", "email")
+    ) { json ->
+        val access = json.optString("access_token")
+        require(access.isNotBlank()) { "Сервер не вернул токен авторизации" }
+        access to json.optString("refresh_token").takeIf { it.isNotBlank() }
+    }
+
     suspend fun lookupContact(accessToken: String, phone: String): Result<ContactResult> = request(
         path = "/functions/v1/lookup-contact",
         method = "POST",
