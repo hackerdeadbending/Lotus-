@@ -40,6 +40,28 @@ object LotusBackend {
         access to json.optString("refresh_token").takeIf { it.isNotBlank() }
     }
 
+    suspend fun signUpWithEmail(email: String, password: String): Result<Pair<String, String?>> = request(
+        path = "/auth/v1/signup",
+        method = "POST",
+        body = JSONObject().put("email", email.trim()).put("password", password)
+    ) { json ->
+        val access = json.optString("access_token")
+        require(access.isNotBlank()) {
+            "Supabase вернул пустую сессию. Возможно, требуется подтверждение email."
+        }
+        access to json.optString("refresh_token").takeIf { it.isNotBlank() }
+    }
+
+    suspend fun signInWithEmail(email: String, password: String): Result<Pair<String, String?>> = request(
+        path = "/auth/v1/token?grant_type=password",
+        method = "POST",
+        body = JSONObject().put("email", email.trim()).put("password", password)
+    ) { json ->
+        val access = json.optString("access_token")
+        require(access.isNotBlank()) { "Сервер не вернул токен авторизации" }
+        access to json.optString("refresh_token").takeIf { it.isNotBlank() }
+    }
+
     suspend fun sendEmailOtp(email: String): Result<Unit> = request(
         path = "/auth/v1/otp",
         method = "POST",
