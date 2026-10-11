@@ -1,0 +1,4 @@
+project_id = "lotus"
+
+[functions.lookup-contact]
+verify_jwt = true
