@@ -94,7 +94,7 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit) {
                     value = phone,
                     onValueChange = { value ->
                         phone = value.filter { it.isDigit() || it == '+' || it == ' ' || it == '-' || it == '(' || it == ')' }
-                        showStatus = false
+                        statusMessage = null
                     },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Номер телефона") },
