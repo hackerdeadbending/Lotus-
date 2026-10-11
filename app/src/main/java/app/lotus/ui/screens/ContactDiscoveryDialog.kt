@@ -22,10 +22,16 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import android.content.Intent
+import android.provider.ContactsContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +48,27 @@ import androidx.compose.ui.unit.dp
 fun ContactDiscoveryDialog(onDismiss: () -> Unit) {
     var phone by remember { mutableStateOf("") }
     var showStatus by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val contactPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data
+        if (result.resultCode == android.app.Activity.RESULT_OK && uri != null) {
+            val number = context.contentResolver.query(
+                uri,
+                arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+            if (!number.isNullOrBlank()) {
+                phone = number
+                showStatus = false
+            }
+        }
+    }
     val colors = MaterialTheme.colorScheme
 
     AlertDialog(
@@ -70,6 +97,23 @@ fun ContactDiscoveryDialog(onDismiss: () -> Unit) {
                     singleLine = true,
                     shape = RoundedCornerShape(17.dp)
                 )
+
+                OutlinedButton(
+                    onClick = {
+                        contactPicker.launch(
+                            Intent(
+                                Intent.ACTION_PICK,
+                                ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(15.dp)
+                ) {
+                    Icon(Icons.Rounded.Contacts, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Выбрать из контактов")
+                }
 
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
