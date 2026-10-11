@@ -93,3 +93,43 @@ set phone_e164 = excluded.phone_e164,
 
 create index if not exists lotus_contact_edges_contact_id_idx
   on public.lotus_contact_edges (contact_id, owner_id);
+
+-- Durable per-user lookup throttling (10 attempts per rolling minute).
+create table if not exists public.lotus_lookup_rate_limits (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  window_started_at timestamptz not null default now(),
+  attempts integer not null default 0 check (attempts >= 0)
+);
+alter table public.lotus_lookup_rate_limits enable row level security;
+revoke all on public.lotus_lookup_rate_limits from anon, authenticated;
+revoke all on public.lotus_lookup_rate_limits from public;
+
+create or replace function public.lotus_consume_contact_lookup_limit(p_user_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_attempts integer;
+begin
+  insert into public.lotus_lookup_rate_limits (user_id, window_started_at, attempts)
+  values (p_user_id, now(), 1)
+  on conflict (user_id) do update
+    set window_started_at = case
+          when public.lotus_lookup_rate_limits.window_started_at < now() - interval '1 minute'
+            then now()
+          else public.lotus_lookup_rate_limits.window_started_at
+        end,
+        attempts = case
+          when public.lotus_lookup_rate_limits.window_started_at < now() - interval '1 minute'
+            then 1
+          else public.lotus_lookup_rate_limits.attempts + 1
+        end
+  returning attempts into v_attempts;
+
+  return v_attempts <= 10;
+end;
+$$;
+revoke all on function public.lotus_consume_contact_lookup_limit(uuid) from public, anon, authenticated;
+grant execute on function public.lotus_consume_contact_lookup_limit(uuid) to service_role;
