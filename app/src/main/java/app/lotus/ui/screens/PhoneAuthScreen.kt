@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,16 +27,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.lotus.data.LotusBackend
 import kotlinx.coroutines.launch
 
 @Composable
-fun PhoneAuthScreen(onAuthenticated: (String, String?) -> Unit) {
-    var phone by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
-    var codeSent by remember { mutableStateOf(false) }
+fun EmailAuthScreen(onAuthenticated: (String, String?) -> Unit) {
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var creatingAccount by remember { mutableStateOf(true) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -65,39 +65,34 @@ fun PhoneAuthScreen(onAuthenticated: (String, String?) -> Unit) {
                 color = colors.onBackground
             )
             Text(
-                if (codeSent) "Введите код из SMS" else "Вход по номеру телефона",
+                if (creatingAccount) "Создать тестовый аккаунт" else "Войти в Lotus",
                 style = MaterialTheme.typography.titleMedium,
                 textAlign = TextAlign.Center
             )
             Text(
-                if (codeSent) "Мы отправили код, если SMS-провайдер настроен для Lotus." else "Ваш номер нужен для подтверждения аккаунта. Он не станет публичным именем профиля.",
+                "Пока вход по телефону не настроен, используйте email и пароль для тестирования приложения.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-            if (!codeSent) {
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it.filter { ch -> ch.isDigit() || ch == '+' || ch == ' ' || ch == '-' || ch == '(' || ch == ')' }; error = null },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Номер телефона") },
-                    placeholder = { Text("+39 333 123 4567") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(17.dp)
-                )
-            } else {
-                OutlinedTextField(
-                    value = code,
-                    onValueChange = { code = it.filter(Char::isDigit).take(8); error = null },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Код из SMS") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(17.dp)
-                )
-                TextButton(onClick = { codeSent = false; code = ""; error = null }, enabled = !loading) {
-                    Text("Изменить номер")
-                }
-            }
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it.trimStart(); error = null },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Email") },
+                placeholder = { Text("you@example.com") },
+                singleLine = true,
+                shape = RoundedCornerShape(17.dp)
+            )
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it; error = null },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Пароль (минимум 6 символов)") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                shape = RoundedCornerShape(17.dp)
+            )
             if (error != null) {
                 Text(error!!, color = colors.error, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
             }
@@ -106,35 +101,38 @@ fun PhoneAuthScreen(onAuthenticated: (String, String?) -> Unit) {
                     loading = true
                     error = null
                     scope.launch {
-                        if (!codeSent) {
-                            LotusBackend.sendOtp(phone.trim()).onSuccess {
-                                codeSent = true
-                            }.onFailure {
-                                error = friendlyError(it.message)
-                            }
+                        val result = if (creatingAccount) {
+                            LotusBackend.signUpWithEmail(email.trim(), password)
                         } else {
-                            LotusBackend.verifyOtp(phone.trim(), code.trim()).onSuccess { session ->
-                                onAuthenticated(session.first, session.second)
-                            }.onFailure {
-                                error = friendlyError(it.message)
-                            }
+                            LotusBackend.signInWithEmail(email.trim(), password)
+                        }
+                        result.onSuccess { session ->
+                            onAuthenticated(session.first, session.second)
+                        }.onFailure { failure ->
+                            error = friendlyEmailError(failure.message)
                         }
                         loading = false
                     }
                 },
-                enabled = !loading && if (codeSent) code.length >= 4 else phone.trim().length >= 8,
+                enabled = !loading && email.contains("@") && password.length >= 6,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 if (loading) {
                     CircularProgressIndicator(strokeWidth = 2.dp)
                 } else {
-                    Text(if (codeSent) "Подтвердить номер" else "Отправить SMS")
+                    Text(if (creatingAccount) "Создать аккаунт" else "Войти")
                 }
             }
-            Spacer(Modifier.height(6.dp))
+            androidx.compose.material3.TextButton(
+                onClick = { creatingAccount = !creatingAccount; error = null },
+                enabled = !loading
+            ) {
+                Text(if (creatingAccount) "Уже есть аккаунт? Войти" else "Нет аккаунта? Создать")
+            }
+            Spacer(Modifier.height(4.dp))
             Text(
-                "Сервер Lotus подключён. Для отправки SMS необходимо включить и настроить провайдера SMS в Supabase Auth.",
+                "Это временный способ входа для разработки. Не используйте здесь пароль от других сервисов.",
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -143,14 +141,16 @@ fun PhoneAuthScreen(onAuthenticated: (String, String?) -> Unit) {
     }
 }
 
-private fun friendlyError(message: String?): String {
+private fun friendlyEmailError(message: String?): String {
     val text = message.orEmpty()
     return when {
-        text.contains("phone provider", true) || text.contains("sms", true) && text.contains("not", true) ->
-            "SMS-провайдер ещё не настроен в Supabase. Нужно включить его в настройках Auth."
-        text.contains("invalid", true) || text.contains("phone", true) ->
-            "Проверьте номер в международном формате, например +393331234567."
-        text.isBlank() -> "Не удалось связаться с сервером. Попробуйте ещё раз."
+        text.contains("confirm", true) || text.contains("email", true) && text.contains("not", true) ->
+            "Проверьте настройки Supabase Auth: для теста без писем отключите Confirm email. Если аккаунт уже создан, переключитесь на «Войти»."
+        text.contains("invalid", true) && text.contains("credentials", true) ->
+            "Неверный email или пароль. Проверьте данные или создайте аккаунт."
+        text.contains("already", true) && text.contains("registered", true) ->
+            "Этот email уже зарегистрирован. Нажмите «Уже есть аккаунт? Войти»."
+        text.isBlank() -> "Не удалось связаться с сервером. Проверьте интернет и попробуйте ещё раз."
         else -> text.take(220)
     }
 }
