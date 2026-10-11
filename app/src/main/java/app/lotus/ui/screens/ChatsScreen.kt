@@ -69,7 +69,7 @@ data class ChatPreview(
 private data class LocalMessage(val text: String, val mine: Boolean, val time: String)
 
 @Composable
-fun ChatsScreen() {
+fun ChatsScreen(accessToken: String) {
     var chats by remember {
         mutableStateOf(
             listOf(
@@ -247,7 +247,7 @@ fun ChatsScreen() {
     }
 
     if (showNewChat) {
-        ContactDiscoveryDialog(onDismiss = { showNewChat = false })
+        ContactDiscoveryDialog(accessToken = accessToken, onDismiss = { showNewChat = false })
     }
 }
 
