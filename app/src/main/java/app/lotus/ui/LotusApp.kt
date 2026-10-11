@@ -1,5 +1,6 @@
 package app.lotus.ui
 
+import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -18,12 +19,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import app.lotus.data.LotusBackend
 import app.lotus.ui.screens.ChatsScreen
+import app.lotus.ui.screens.PhoneAuthScreen
 import app.lotus.ui.screens.SplashScreen
 
 @Composable
 fun LotusApp() {
+    val context = LocalContext.current
     var showSplash by remember { mutableStateOf(true) }
+    var accessToken by remember { mutableStateOf(LotusBackend.accessToken(context)) }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Box(
@@ -51,11 +57,14 @@ fun LotusApp() {
                 label = "main_transition"
             ) { isSplash ->
                 if (isSplash) {
-                    SplashScreen(
-                        onFinished = { showSplash = false }
-                    )
+                    SplashScreen(onFinished = { showSplash = false })
+                } else if (accessToken.isNullOrBlank()) {
+                    PhoneAuthScreen { access, refresh ->
+                        LotusBackend.saveSession(context, access, refresh)
+                        accessToken = access
+                    }
                 } else {
-                    ChatsScreen()
+                    ChatsScreen(accessToken = accessToken.orEmpty())
                 }
             }
         }
