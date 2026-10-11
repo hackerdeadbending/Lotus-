@@ -32,6 +32,9 @@ import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
+import app.lotus.data.LotusBackend
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,9 +48,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ContactDiscoveryDialog(onDismiss: () -> Unit) {
+fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit) {
     var phone by remember { mutableStateOf("") }
-    var showStatus by remember { mutableStateOf(false) }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val contactPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -65,7 +70,7 @@ fun ContactDiscoveryDialog(onDismiss: () -> Unit) {
             }
             if (!number.isNullOrBlank()) {
                 phone = number
-                showStatus = false
+                statusMessage = null
             }
         }
     }
@@ -158,23 +163,37 @@ fun ContactDiscoveryDialog(onDismiss: () -> Unit) {
                     )
                 }
 
-                if (showStatus) {
+                if (statusMessage != null) {
                     Text(
-                        "Поиск пока не подключён: Lotus ещё не имеет серверного сопоставления взаимных контактов. Мы не будем создавать фальшивый чат или показывать несуществующий результат.",
+                        statusMessage!!,
                         style = MaterialTheme.typography.bodySmall,
-                        color = colors.secondary
+                        color = if (statusMessage!!.startsWith("Ошибка")) colors.error else colors.secondary
                     )
                 }
             }
         },
         confirmButton = {
             Button(
-                onClick = { showStatus = true },
-                enabled = phone.trim().length >= 5,
+                onClick = {
+                    checking = true
+                    statusMessage = null
+                    scope.launch {
+                        LotusBackend.lookupContact(accessToken, phone.trim())
+                            .onSuccess { result ->
+                                statusMessage = if (result.mutual) "Взаимный контакт найден. Подключение чатов — следующий этап."
+                                else "Запрос обработан. Контакт появится, когда другой пользователь Lotus тоже добавит ваш номер."
+                            }
+                            .onFailure { failure ->
+                                statusMessage = "Ошибка: " + (failure.message ?: "не удалось проверить контакт")
+                            }
+                        checking = false
+                    }
+                },
+                enabled = phone.trim().length >= 5 && !checking,
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors()
             ) {
-                Text("Проверить контакт")
+                Text(if (checking) "Проверяем…" else "Проверить контакт")
             }
         },
         dismissButton = {
