@@ -60,6 +60,14 @@ Deno.serve(async (req: Request) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
+    // Durable throttling limits account enumeration: 10 lookup attempts per minute per user.
+    const { data: allowed, error: limitError } = await admin.rpc(
+      "lotus_consume_contact_lookup_limit",
+      { p_user_id: user.id },
+    );
+    if (limitError) return json({ error: "lookup_unavailable" }, 503);
+    if (allowed !== true) return json({ error: "rate_limited" }, 429);
+
     // Keep lookup responses generic for unknown numbers to reduce account enumeration.
     const { data: target, error: targetError } = await admin
       .from("lotus_profiles")
