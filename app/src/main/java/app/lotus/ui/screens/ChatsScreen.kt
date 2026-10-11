@@ -85,7 +85,6 @@ fun ChatsScreen() {
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var showNewChat by remember { mutableStateOf(false) }
-    var newChatName by remember { mutableStateOf("") }
     var showSettings by remember { mutableStateOf(false) }
     var notificationsEnabled by remember { mutableStateOf(true) }
     var draft by remember { mutableStateOf("") }
@@ -248,32 +247,7 @@ fun ChatsScreen() {
     }
 
     if (showNewChat) {
-        AlertDialog(
-            onDismissRequest = { showNewChat = false; newChatName = "" },
-            title = { Text("Новый чат") },
-            text = {
-                OutlinedTextField(
-                    value = newChatName,
-                    onValueChange = { newChatName = it },
-                    label = { Text("Имя или номер телефона") },
-                    placeholder = { Text("+39 000 000 0000") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp)
-                )
-            },
-            confirmButton = {
-                Button(enabled = newChatName.isNotBlank(), onClick = {
-                    val name = newChatName.trim()
-                    val id = "local-" + System.currentTimeMillis().toString()
-                    val chat = ChatPreview(id, name, "Начните общение", "сейчас", subtitle = "новый контакт")
-                    chats = listOf(chat) + chats
-                    selectedChat = chat
-                    showNewChat = false
-                    newChatName = ""
-                }) { Text("Продолжить") }
-            },
-            dismissButton = { TextButton(onClick = { showNewChat = false; newChatName = "" }) { Text("Отмена") } }
-        )
+        ContactDiscoveryDialog(onDismiss = { showNewChat = false })
     }
 }
 
