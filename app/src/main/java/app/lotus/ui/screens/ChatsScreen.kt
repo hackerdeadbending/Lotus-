@@ -59,6 +59,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.lotus.data.LotusBackend
@@ -478,6 +482,7 @@ private fun ConversationScreen(
     onSend: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
+    val context = LocalContext.current
     var showChatInfo by remember(chat.id) { mutableStateOf(false) }
     Scaffold(
         containerColor = colors.background,
@@ -604,6 +609,14 @@ private fun ConversationScreen(
                 }
             },
             confirmButton = { TextButton(onClick = { showChatInfo = false }) { Text("Готово") } },
+            dismissButton = {
+                TextButton(onClick = {
+                    val fingerprint = keyFingerprint(chat.peerPublicKey)
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Lotus key fingerprint", fingerprint))
+                    Toast.makeText(context, "Отпечаток скопирован", Toast.LENGTH_SHORT).show()
+                }) { Text("Копировать") }
+            },
             shape = RoundedCornerShape(24.dp)
         )
     }
