@@ -49,6 +49,12 @@ Deno.serve(async (req: Request) => {
       if (!/^[A-Za-z0-9+/]{80,200}={0,2}$/.test(publicKey)) {
         return reply({ error: "encryption_public_key_invalid" }, 400);
       }
+      try {
+        const der = Uint8Array.from(atob(publicKey), (character) => character.charCodeAt(0));
+        await crypto.subtle.importKey("spki", der, { name: "ECDH", namedCurve: "P-256" }, false, []);
+      } catch {
+        return reply({ error: "encryption_public_key_invalid" }, 400);
+      }
       const { data: currentProfile, error: profileError } = await admin.from("lotus_profiles")
         .select("encryption_public_key")
         .eq("user_id", user.id)
