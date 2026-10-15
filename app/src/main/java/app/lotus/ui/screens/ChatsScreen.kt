@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -63,6 +64,9 @@ import app.lotus.data.LotusBackend
 import app.lotus.data.LotusChat
 import app.lotus.data.LotusMessage
 import kotlinx.coroutines.delay
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 
 private data class ChatPreview(
@@ -479,8 +483,13 @@ private fun ConversationScreen(
                     }
                 }
             } else {
+                val messageListState = rememberLazyListState()
+                LaunchedEffect(messages.size) {
+                    if (messages.isNotEmpty()) messageListState.animateScrollToItem(messages.lastIndex)
+                }
                 LazyColumn(
-                    Modifier.weight(1f).fillMaxWidth(),
+                    state = messageListState,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -576,8 +585,12 @@ private fun Avatar(name: String, modifier: Modifier = Modifier) {
 
 private fun displayTime(value: String): String {
     if (value.isBlank()) return ""
-    val time = value.substringAfter('T', value).take(5)
-    return if (time.matches(Regex("\\d{2}:\\d{2}"))) time else ""
+    return runCatching {
+        Instant.parse(value).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
+    }.getOrElse {
+        val time = value.substringAfter('T', value).take(5)
+        if (time.matches(Regex("\\d{2}:\\d{2}"))) time else ""
+    }
 }
 
 private fun friendlyMessagingError(message: String?): String {
