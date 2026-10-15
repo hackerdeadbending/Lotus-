@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -46,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -127,7 +129,10 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { value ->
@@ -161,7 +166,7 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = inviteCode,
-                        onValueChange = { inviteCode = it.filter { ch -> ch.isLetterOrDigit() }.uppercase().take(24) },
+                        onValueChange = { inviteCode = it.uppercase().filter { ch -> ch in '0'..'9' || ch in 'A'..'F' }.take(24) },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Код приглашения") },
                         placeholder = { Text("24 символа") },
@@ -368,7 +373,10 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                 TextButton(onClick = {
                     val sendIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, inviteUrl)
+                        putExtra(
+                            Intent.EXTRA_TEXT,
+                            personalInviteCode?.let { code -> "Код приглашения Lotus: $code. Введите его в разделе «Добавить человека». Скачать приложение: $inviteUrl" } ?: inviteUrl
+                        )
                     }
                     context.startActivity(Intent.createChooser(sendIntent, "Поделиться Lotus"))
                 }) { Text("Поделиться ссылкой") }
