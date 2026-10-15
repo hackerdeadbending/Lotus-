@@ -68,6 +68,8 @@ import app.lotus.data.LotusMessage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.security.MessageDigest
+import android.util.Base64
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -475,6 +477,7 @@ private fun ConversationScreen(
     onSend: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
+    var showChatInfo by remember(chat.id) { mutableStateOf(false) }
     Scaffold(
         containerColor = colors.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -516,7 +519,7 @@ private fun ConversationScreen(
                     Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("Личный чат", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
-                IconButton(onClick = {}) { Icon(Icons.Rounded.MoreVert, contentDescription = "Ещё", tint = colors.onSurfaceVariant) }
+                IconButton(onClick = { showChatInfo = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = "Информация о чате", tint = colors.onSurfaceVariant) }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outline.copy(alpha = 0.35f)))
             if (!encryptionReady) {
@@ -577,6 +580,30 @@ private fun ConversationScreen(
                 textAlign = TextAlign.Center
             )
         }
+    }
+    if (showChatInfo) {
+        AlertDialog(
+            onDismissRequest = { showChatInfo = false },
+            title = { Text("Защита переписки") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Отпечаток открытого ключа", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
+                    Text(
+                        keyFingerprint(chat.peerPublicKey),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "Для дополнительной проверки сравните этот отпечаток с собеседником по другому каналу. Не удаляйте приложение: резервное восстановление приватного ключа пока не реализовано.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = { showChatInfo = false }) { Text("Готово") } },
+            shape = RoundedCornerShape(24.dp)
+        )
     }
 }
 
@@ -659,6 +686,15 @@ private fun EncryptionStatusBanner(error: String?, onRetry: () -> Unit) {
             TextButton(onClick = onRetry) { Text("Повторить") }
         }
     }
+}
+
+private fun keyFingerprint(publicKey: String?): String {
+    if (publicKey.isNullOrBlank()) return "Ключ собеседника ещё не опубликован"
+    return runCatching {
+        val bytes = Base64.decode(publicKey, Base64.NO_WRAP)
+        val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+        digest.joinToString("") { "%02X".format(it.toInt() and 0xff) }.chunked(4).joinToString(" ")
+    }.getOrElse { "Не удалось вычислить отпечаток ключа" }
 }
 
 private fun displayTime(value: String): String {
