@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -90,6 +91,77 @@ object LotusBackend {
         )
     }
 
+    suspend fun listChats(accessToken: String): Result<List<LotusChat>> = request(
+        path = "/functions/v1/lotus-messaging",
+        body = JSONObject().put("action", "list_chats"),
+        bearer = accessToken
+    ) { json ->
+        val rows = json.optJSONArray("chats") ?: JSONArray()
+        (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val id = row.optString("id")
+            if (id.isBlank()) return@mapNotNull null
+            LotusChat(
+                id = id,
+                peerId = row.optString("peerId"),
+                displayName = row.optString("displayName").ifBlank { "Lotus contact" },
+                lastMessage = row.optString("lastMessage"),
+                lastMessageAt = row.optString("lastMessageAt")
+            )
+        }
+    }
+
+    suspend fun startChat(accessToken: String, contactId: String): Result<LotusChat> = request(
+        path = "/functions/v1/lotus-messaging",
+        body = JSONObject().put("action", "start_chat").put("contactId", contactId),
+        bearer = accessToken
+    ) { json ->
+        val row = json.optJSONObject("chat") ?: error("Сервер не вернул чат")
+        LotusChat(
+            id = row.optString("id").also { require(it.isNotBlank()) { "Сервер не вернул ID чата" } },
+            peerId = row.optString("peerId"),
+            displayName = row.optString("displayName").ifBlank { "Lotus contact" },
+            lastMessage = row.optString("lastMessage"),
+            lastMessageAt = row.optString("lastMessageAt")
+        )
+    }
+
+    suspend fun listMessages(accessToken: String, conversationId: String): Result<List<LotusMessage>> = request(
+        path = "/functions/v1/lotus-messaging",
+        body = JSONObject().put("action", "list_messages").put("conversationId", conversationId),
+        bearer = accessToken
+    ) { json ->
+        val rows = json.optJSONArray("messages") ?: JSONArray()
+        (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            val id = row.optString("id")
+            if (id.isBlank()) return@mapNotNull null
+            LotusMessage(
+                id = id,
+                senderId = row.optString("sender_id"),
+                body = row.optString("body"),
+                createdAt = row.optString("created_at")
+            )
+        }
+    }
+
+    suspend fun sendMessage(accessToken: String, conversationId: String, text: String): Result<LotusMessage> = request(
+        path = "/functions/v1/lotus-messaging",
+        body = JSONObject()
+            .put("action", "send_message")
+            .put("conversationId", conversationId)
+            .put("text", text),
+        bearer = accessToken
+    ) { json ->
+        val row = json.optJSONObject("message") ?: error("Сервер не вернул сообщение")
+        LotusMessage(
+            id = row.optString("id").also { require(it.isNotBlank()) { "Сервер не вернул ID сообщения" } },
+            senderId = row.optString("sender_id"),
+            body = row.optString("body"),
+            createdAt = row.optString("created_at")
+        )
+    }
+
     private suspend fun <T> request(
         path: String,
         method: String = "POST",
@@ -129,4 +201,19 @@ object LotusBackend {
     }
 }
 
-data class ContactResult(val mutual: Boolean, val displayName: String?)
+data class ContactResult(val mutual: Boolean, val displayName: String?, val contactId: String? = null)
+
+data class LotusChat(
+    val id: String,
+    val peerId: String,
+    val displayName: String,
+    val lastMessage: String,
+    val lastMessageAt: String
+)
+
+data class LotusMessage(
+    val id: String,
+    val senderId: String,
+    val body: String,
+    val createdAt: String
+)
