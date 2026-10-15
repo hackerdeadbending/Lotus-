@@ -1,6 +1,13 @@
 package app.lotus.data
 
 import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.spec.GCMParameterSpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -14,18 +21,66 @@ object LotusBackend {
     private const val PREFS = "lotus_auth"
     private const val ACCESS = "access_token"
     private const val REFRESH = "refresh_token"
+    private const val SESSION_KEY_ALIAS = "lotus_session_storage_v1"
+    private const val ENCRYPTED_PREFIX = "ENC1:"
 
-    fun accessToken(context: Context): String? =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(ACCESS, null)
+    fun accessToken(context: Context): String? = readSessionValue(context, ACCESS)
 
-    fun refreshToken(context: Context): String? =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(REFRESH, null)
+    fun refreshToken(context: Context): String? = readSessionValue(context, REFRESH)
 
     fun saveSession(context: Context, accessToken: String, refreshToken: String?) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(ACCESS, accessToken)
-            .putString(REFRESH, refreshToken)
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(ACCESS, protectSessionValue(accessToken))
+            .apply {
+                if (refreshToken.isNullOrBlank()) remove(REFRESH)
+                else putString(REFRESH, protectSessionValue(refreshToken))
+            }
             .apply()
+    }
+
+    private fun readSessionValue(context: Context, key: String): String? {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val stored = prefs.getString(key, null) ?: return null
+        if (stored.startsWith(ENCRYPTED_PREFIX)) {
+            return runCatching { unprotectSessionValue(stored) }.getOrNull()
+        }
+        // Migrate tokens written by earlier builds from plaintext preferences.
+        return runCatching {
+            prefs.edit().putString(key, protectSessionValue(stored)).apply()
+            stored
+        }.getOrElse { stored }
+    }
+
+    private fun protectSessionValue(value: String): String {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, sessionStorageKey())
+        return ENCRYPTED_PREFIX + Base64.encodeToString(cipher.iv + cipher.doFinal(value.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
+    }
+
+    private fun unprotectSessionValue(value: String): String {
+        val payload = Base64.decode(value.removePrefix(ENCRYPTED_PREFIX), Base64.NO_WRAP)
+        require(payload.size > 12) { "Повреждённая сохранённая сессия" }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, sessionStorageKey(), GCMParameterSpec(128, payload.copyOfRange(0, 12)))
+        return String(cipher.doFinal(payload.copyOfRange(12, payload.size)), Charsets.UTF_8)
+    }
+
+    private fun sessionStorageKey(): java.security.Key {
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        store.getKey(SESSION_KEY_ALIAS, null)?.let { return it }
+        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        generator.init(
+            KeyGenParameterSpec.Builder(
+                SESSION_KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setRandomizedEncryptionRequired(true)
+                .build()
+        )
+        return generator.generateKey()
     }
 
     fun clearSession(context: Context) {
