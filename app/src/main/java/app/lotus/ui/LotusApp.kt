@@ -1,6 +1,5 @@
 package app.lotus.ui
 
-import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -22,7 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import app.lotus.data.LotusBackend
 import app.lotus.ui.screens.ChatsScreen
-import app.lotus.ui.screens.PhoneAuthScreen
+import app.lotus.ui.screens.EmailAuthScreen
 import app.lotus.ui.screens.SplashScreen
 
 @Composable
@@ -59,7 +58,7 @@ fun LotusApp() {
                 if (isSplash) {
                     SplashScreen(onFinished = { showSplash = false })
                 } else if (accessToken.isNullOrBlank()) {
-                    PhoneAuthScreen { access, refresh ->
+                    EmailAuthScreen { access, refresh ->
                         LotusBackend.saveSession(context, access, refresh)
                         accessToken = access
                     }
