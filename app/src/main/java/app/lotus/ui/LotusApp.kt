@@ -21,6 +21,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import app.lotus.data.LotusBackend
+import app.lotus.data.LotusCrypto
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import app.lotus.ui.screens.ChatsScreen
 import app.lotus.ui.screens.EmailAuthScreen
 import app.lotus.ui.screens.SplashScreen
@@ -30,6 +33,9 @@ fun LotusApp() {
     val context = LocalContext.current
     var showSplash by remember { mutableStateOf(true) }
     var accessToken by remember { mutableStateOf(LotusBackend.accessToken(context)) }
+    var encryptionReady by remember { mutableStateOf(false) }
+    var encryptionError by remember { mutableStateOf<String?>(null) }
+    var encryptionRetry by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
         val refresh = LotusBackend.refreshToken(context)
@@ -37,6 +43,32 @@ fun LotusApp() {
             LotusBackend.refreshSession(refresh).onSuccess { session ->
                 LotusBackend.saveSession(context, session.first, session.second ?: refresh)
                 accessToken = session.first
+            }
+        }
+    }
+
+    LaunchedEffect(accessToken, encryptionRetry) {
+        val token = accessToken
+        if (token.isNullOrBlank()) {
+            encryptionReady = false
+            encryptionError = null
+        } else {
+            encryptionReady = false
+            encryptionError = null
+            runCatching {
+                withContext(Dispatchers.IO) { LotusCrypto.getOrCreatePublicKey(context) }
+            }.onSuccess { publicKey ->
+                LotusBackend.publishEncryptionPublicKey(token, publicKey)
+                    .onSuccess { encryptionReady = true }
+                    .onFailure { failure ->
+                        encryptionError = when {
+                            failure.message.orEmpty().contains("encryption_public_key_invalid", true) ->
+                                "Не удалось опубликовать ключ шифрования. Обновите приложение."
+                            else -> "Не удалось подключить защищённый обмен ключами. Проверьте интернет и повторите."
+                        }
+                    }
+            }.onFailure { failure ->
+                encryptionError = failure.message ?: "Не удалось подготовить локальный ключ шифрования."
             }
         }
     }
@@ -76,6 +108,9 @@ fun LotusApp() {
                 } else {
                     ChatsScreen(
                         accessToken = accessToken.orEmpty(),
+                        encryptionReady = encryptionReady,
+                        encryptionError = encryptionError,
+                        onRetryEncryption = { encryptionRetry += 1 },
                         onLogout = {
                             LotusBackend.clearSession(context)
                             accessToken = null
