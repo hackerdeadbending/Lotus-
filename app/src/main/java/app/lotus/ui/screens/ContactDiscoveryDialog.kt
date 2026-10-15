@@ -114,7 +114,9 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                     showQr = true
                 }
             }.onFailure { failure ->
-                statusMessage = "Ошибка: " + (failure.message ?: "не удалось создать приглашение")
+                statusMessage = if (failure.message.orEmpty().contains("encryption_keys_not_ready", true)) {
+                    "Подождите, пока Lotus подключит защищённые ключи, затем создайте приглашение ещё раз."
+                } else "Ошибка: " + (failure.message ?: "не удалось создать приглашение")
             }
             creatingInvite = false
         }
@@ -191,6 +193,8 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                                             "Код недействителен, уже использован или истёк."
                                         failure.message?.contains("invite_cannot_accept_own", true) == true ->
                                             "Нельзя принять собственное приглашение. Отправьте код другому человеку."
+                                        failure.message?.contains("encryption_keys_not_ready", true) == true ->
+                                            "Защищённые ключи ещё не готовы. Оба пользователя должны открыть Lotus и дождаться подключения."
                                         else -> "Ошибка: " + (failure.message ?: "не удалось принять приглашение")
                                     }
                                 }
@@ -308,7 +312,9 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                                     onChatStarted(chat)
                                     onDismiss()
                                 }.onFailure { failure ->
-                                    statusMessage = "Не удалось открыть чат: " + (failure.message ?: "ошибка сервера")
+                                    statusMessage = if (failure.message.orEmpty().contains("encryption_keys_not_ready", true)) {
+                                        "Защищённые ключи ещё не готовы. Повторите попытку через несколько секунд."
+                                    } else "Не удалось открыть чат: " + (failure.message ?: "ошибка сервера")
                                 }
                             } else {
                                 statusMessage = "Запрос обработан. Контакт появится, когда другой пользователь Lotus тоже добавит ваш номер."
