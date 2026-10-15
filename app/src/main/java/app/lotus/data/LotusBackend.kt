@@ -114,6 +114,12 @@ object LotusBackend {
         )
     }
 
+    suspend fun publishEncryptionPublicKey(accessToken: String, publicKey: String): Result<Unit> = request(
+        path = "/functions/v1/lotus-messaging",
+        body = JSONObject().put("action", "publish_encryption_key").put("encryptionPublicKey", publicKey),
+        bearer = accessToken
+    ) { Unit }
+
     suspend fun getDisplayName(accessToken: String): Result<String> = request(
         path = "/functions/v1/lotus-messaging",
         body = JSONObject().put("action", "get_profile"),
@@ -151,7 +157,8 @@ object LotusBackend {
             peerId = row.optString("peerId"),
             displayName = row.optString("displayName").ifBlank { "Lotus contact" },
             lastMessage = row.optString("lastMessage"),
-            lastMessageAt = row.optString("lastMessageAt")
+            lastMessageAt = row.optString("lastMessageAt"),
+            peerPublicKey = row.optString("peerPublicKey").takeIf { it.isNotBlank() && it != "null" }
         )
     }
 
@@ -170,7 +177,8 @@ object LotusBackend {
                 peerId = row.optString("peerId"),
                 displayName = row.optString("displayName").ifBlank { "Lotus contact" },
                 lastMessage = row.optString("lastMessage"),
-                lastMessageAt = row.optString("lastMessageAt")
+                lastMessageAt = row.optString("lastMessageAt"),
+                peerPublicKey = row.optString("peerPublicKey").takeIf { it.isNotBlank() && it != "null" }
             )
         }
     }
@@ -274,7 +282,8 @@ data class LotusChat(
     val peerId: String,
     val displayName: String,
     val lastMessage: String,
-    val lastMessageAt: String
+    val lastMessageAt: String,
+    val peerPublicKey: String? = null
 )
 
 data class LotusMessage(
