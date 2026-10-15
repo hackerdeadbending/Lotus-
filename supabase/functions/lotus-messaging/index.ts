@@ -29,7 +29,10 @@ Deno.serve(async (req: Request) => {
     const { data: authData, error: authError } = await auth.auth.getUser(token);
     const user = authData.user;
     if (authError || !user) return reply({ error: "unauthorized" }, 401);
-    if (!user.phone || !user.phone_confirmed_at) return reply({ error: "verified_phone_required" }, 403);
+
+    // Email-authenticated accounts may use existing conversations. Starting a new chat
+    // still requires reciprocal contact edges below, and contact discovery separately
+    // requires a verified phone number in lookup-contact.
 
     let body: { action?: unknown; contactId?: unknown; conversationId?: unknown; text?: unknown };
     try {
