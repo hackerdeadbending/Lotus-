@@ -60,6 +60,10 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
     var showQr by remember { mutableStateOf(false) }
+    var inviteCode by remember { mutableStateOf("") }
+    var personalInviteCode by remember { mutableStateOf<String?>(null) }
+    var creatingInvite by remember { mutableStateOf(false) }
+    var acceptingInvite by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val contactPicker = rememberLauncherForActivityResult(
@@ -83,6 +87,32 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
         }
     }
     val colors = MaterialTheme.colorScheme
+
+    fun createPersonalInvite(share: Boolean) {
+        if (creatingInvite) return
+        creatingInvite = true
+        statusMessage = null
+        scope.launch {
+            LotusBackend.createInvite(accessToken).onSuccess { code ->
+                personalInviteCode = code
+                if (share) {
+                    val inviteText = "Присоединяйся ко мне в Lotus! Код приглашения: $code. Он действует 7 дней. Установи приложение: https://github.com/hackerdeadbending/Lotus-/releases, затем введи код в разделе «Добавить человека»."
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, "Приглашение в Lotus")
+                        putExtra(Intent.EXTRA_TEXT, inviteText)
+                    }
+                    context.startActivity(Intent.createChooser(sendIntent, "Пригласить в Lotus"))
+                    statusMessage = "Код создан. Он действует 7 дней и может быть использован один раз."
+                } else {
+                    showQr = true
+                }
+            }.onFailure { failure ->
+                statusMessage = "Ошибка: " + (failure.message ?: "не удалось создать приглашение")
+            }
+            creatingInvite = false
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -128,6 +158,70 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                     Text("Выбрать из контактов")
                 }
 
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = inviteCode,
+                        onValueChange = { inviteCode = it.filter { ch -> ch.isLetterOrDigit() }.uppercase().take(24) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Код приглашения") },
+                        placeholder = { Text("24 символа") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(17.dp)
+                    )
+                    Button(
+                        onClick = {
+                            acceptingInvite = true
+                            statusMessage = null
+                            scope.launch {
+                                LotusBackend.acceptInvite(accessToken, inviteCode).onSuccess { chat ->
+                                    onChatStarted(chat)
+                                    onDismiss()
+                                }.onFailure { failure ->
+                                    statusMessage = when {
+                                        failure.message?.contains("invite_invalid_or_expired", true) == true ->
+                                            "Код недействителен, уже использован или истёк."
+                                        failure.message?.contains("invite_cannot_accept_own", true) == true ->
+                                            "Нельзя принять собственное приглашение. Отправьте код другому человеку."
+                                        else -> "Ошибка: " + (failure.message ?: "не удалось принять приглашение")
+                                    }
+                                }
+                                acceptingInvite = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = inviteCode.length == 24 && !acceptingInvite,
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text(if (acceptingInvite) "Принимаем…" else "Принять приглашение")
+                    }
+                    OutlinedButton(
+                        onClick = { createPersonalInvite(share = true) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !creatingInvite,
+                        shape = RoundedCornerShape(15.dp)
+                    ) {
+                        Icon(Icons.Rounded.Share, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (creatingInvite) "Создаём код…" else "Создать личное приглашение")
+                    }
+                    personalInviteCode?.let { code ->
+                        Surface(
+                            color = colors.secondaryContainer.copy(alpha = 0.7f),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Ваш код приглашения", fontWeight = FontWeight.SemiBold)
+                                Text(code, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("Одноразовый · действует 7 дней", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                                TextButton(onClick = { createPersonalInvite(share = true) }, enabled = !creatingInvite) {
+                                    Text("Создать новый код и поделиться")
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = colors.primaryContainer.copy(alpha = 0.55f),
@@ -164,22 +258,17 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                         icon = { Icon(Icons.Rounded.QrCode2, contentDescription = null) },
                         title = "QR-код",
                         subtitle = "Установить Lotus",
-                        onClick = { showQr = true }
+                        onClick = {
+                            if (personalInviteCode != null) showQr = true
+                            else createPersonalInvite(share = false)
+                        }
                     )
                     DiscoveryOption(
                         modifier = Modifier.weight(1f),
                         icon = { Icon(Icons.Rounded.Share, contentDescription = null) },
                         title = "Пригласить",
                         subtitle = "Поделиться ссылкой",
-                        onClick = {
-                            val inviteText = "Присоединяйся к Lotus — личному пространству для общения. Скачать приложение: https://github.com/hackerdeadbending/Lotus-/releases"
-                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_SUBJECT, "Приглашение в Lotus")
-                                putExtra(Intent.EXTRA_TEXT, inviteText)
-                            }
-                            context.startActivity(Intent.createChooser(sendIntent, "Пригласить в Lotus"))
-                        }
+                        onClick = { createPersonalInvite(share = true) }
                     )
                 }
 
@@ -240,9 +329,10 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
 
     if (showQr) {
         val inviteUrl = "https://github.com/hackerdeadbending/Lotus-/releases"
-        val qrBitmap = remember(inviteUrl) {
+        val qrPayload = personalInviteCode?.let { "LOTUS-INVITE:$it" } ?: inviteUrl
+        val qrBitmap = remember(qrPayload) {
             runCatching {
-                val matrix = QRCodeWriter().encode(inviteUrl, BarcodeFormat.QR_CODE, 640, 640)
+                val matrix = QRCodeWriter().encode(qrPayload, BarcodeFormat.QR_CODE, 640, 640)
                 Bitmap.createBitmap(640, 640, Bitmap.Config.ARGB_8888).also { bitmap ->
                     for (x in 0 until 640) {
                         for (y in 0 until 640) {
@@ -260,14 +350,14 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                     if (qrBitmap != null) {
                         Image(
                             bitmap = qrBitmap.asImageBitmap(),
-                            contentDescription = "QR-код со ссылкой на установку Lotus",
+                            contentDescription = "QR-код приглашения в Lotus",
                             modifier = Modifier.fillMaxWidth().padding(8.dp)
                         )
                     } else {
                         Text("Не удалось создать QR-код. Используйте кнопку «Пригласить».")
                     }
                     Text(
-                        "Отсканируйте код, чтобы открыть страницу загрузки Lotus. Это ссылка на приложение, не личный код пользователя.",
+                        if (personalInviteCode != null) "Это личный одноразовый код. Получатель должен установить Lotus и ввести код в поле «Код приглашения»." else "Отсканируйте код, чтобы открыть страницу загрузки Lotus.",
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
                         color = colors.onSurfaceVariant
