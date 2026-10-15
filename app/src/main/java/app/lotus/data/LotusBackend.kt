@@ -114,6 +114,16 @@ object LotusBackend {
         )
     }
 
+    suspend fun updateDisplayName(accessToken: String, displayName: String): Result<String> = request(
+        path = "/functions/v1/lotus-messaging",
+        body = JSONObject().put("action", "update_profile").put("displayName", displayName.trim()),
+        bearer = accessToken
+    ) { json ->
+        json.optString("displayName").also {
+            require(it.length in 2..40) { "Сервер вернул неверное имя профиля" }
+        }
+    }
+
     suspend fun createInvite(accessToken: String): Result<String> = request(
         path = "/functions/v1/lotus-messaging",
         body = JSONObject().put("action", "create_invite"),
