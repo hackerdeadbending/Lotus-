@@ -41,10 +41,20 @@ fun LotusApp() {
     LaunchedEffect(Unit) {
         val refresh = LotusBackend.refreshToken(context)
         if (!refresh.isNullOrBlank()) {
-            LotusBackend.refreshSession(refresh).onSuccess { session ->
-                LotusBackend.saveSession(context, session.first, session.second ?: refresh)
-                accessToken = session.first
-            }
+            LotusBackend.refreshSession(refresh)
+                .onSuccess { session ->
+                    LotusBackend.saveSession(context, session.first, session.second ?: refresh)
+                    accessToken = session.first
+                }
+                .onFailure { failure ->
+                    val message = failure.message.orEmpty()
+                    if (message.contains("invalid refresh token", true) ||
+                        message.contains("refresh token not found", true)
+                    ) {
+                        LotusBackend.clearSession(context)
+                        accessToken = null
+                    }
+                }
         }
     }
 
@@ -52,10 +62,20 @@ fun LotusApp() {
         while (!accessToken.isNullOrBlank()) {
             delay(45 * 60 * 1000L)
             val refresh = LotusBackend.refreshToken(context) ?: continue
-            LotusBackend.refreshSession(refresh).onSuccess { session ->
-                LotusBackend.saveSession(context, session.first, session.second ?: refresh)
-                accessToken = session.first
-            }
+            LotusBackend.refreshSession(refresh)
+                .onSuccess { session ->
+                    LotusBackend.saveSession(context, session.first, session.second ?: refresh)
+                    accessToken = session.first
+                }
+                .onFailure { failure ->
+                    val message = failure.message.orEmpty()
+                    if (message.contains("invalid refresh token", true) ||
+                        message.contains("refresh token not found", true)
+                    ) {
+                        LotusBackend.clearSession(context)
+                        accessToken = null
+                    }
+                }
         }
     }
 
