@@ -262,7 +262,7 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                         modifier = Modifier.weight(1f),
                         icon = { Icon(Icons.Rounded.QrCode2, contentDescription = null) },
                         title = "QR-код",
-                        subtitle = "Установить Lotus",
+                        subtitle = "QR-код приглашения",
                         onClick = {
                             if (personalInviteCode != null) showQr = true
                             else createPersonalInvite(share = false)
@@ -379,7 +379,7 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                         )
                     }
                     context.startActivity(Intent.createChooser(sendIntent, "Поделиться Lotus"))
-                }) { Text("Поделиться ссылкой") }
+                }) { Text("Поделиться приглашением") }
             },
             dismissButton = { TextButton(onClick = { showQr = false }) { Text("Готово") } },
             shape = RoundedCornerShape(24.dp)
