@@ -166,6 +166,34 @@ fun EmailAuthScreen(onAuthenticated: (String, String?) -> Unit) {
                 }
             }
 
+            if (!createAccount) {
+                TextButton(
+                    onClick = {
+                        loading = true
+                        error = null
+                        info = null
+                        scope.launch {
+                            LotusBackend.sendPasswordRecovery(email.trim())
+                                .onSuccess {
+                                    info = "Если аккаунт с такой почтой существует, письмо для восстановления скоро придёт. Проверьте также папку «Спам»."
+                                }
+                                .onFailure { failure ->
+                                    error = when {
+                                        failure.message.orEmpty().contains("rate", true) ->
+                                            "Слишком много запросов. Подождите немного и попробуйте снова."
+                                        else ->
+                                            "Не удалось отправить письмо. Проверьте адрес и интернет-соединение."
+                                    }
+                                }
+                            loading = false
+                        }
+                    },
+                    enabled = !loading && validEmail
+                ) {
+                    Text("Забыли пароль?")
+                }
+            }
+
             TextButton(
                 onClick = {
                     createAccount = !createAccount
