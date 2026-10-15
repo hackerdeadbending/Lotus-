@@ -49,6 +49,14 @@ Deno.serve(async (req: Request) => {
       if (!/^[A-Za-z0-9+/]{80,200}={0,2}$/.test(publicKey)) {
         return reply({ error: "encryption_public_key_invalid" }, 400);
       }
+      const { data: currentProfile, error: profileError } = await admin.from("lotus_profiles")
+        .select("encryption_public_key")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (profileError || !currentProfile) return reply({ error: "profile_unavailable" }, 503);
+      if (currentProfile.encryption_public_key && currentProfile.encryption_public_key !== publicKey) {
+        return reply({ error: "encryption_key_already_registered" }, 409);
+      }
       const { error } = await admin.from("lotus_profiles")
         .update({ encryption_public_key: publicKey, updated_at: new Date().toISOString() })
         .eq("user_id", user.id);
