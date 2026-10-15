@@ -42,7 +42,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -91,7 +90,9 @@ fun ChatsScreen(accessToken: String, onLogout: () -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
     var showNewChat by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var notificationsEnabled by remember { mutableStateOf(true) }
+    var profileName by remember { mutableStateOf("") }
+    var profileNameSaving by remember { mutableStateOf(false) }
+    var profileStatus by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
     var loadingChats by remember { mutableStateOf(true) }
     var loadingMessages by remember { mutableStateOf(false) }
@@ -247,7 +248,14 @@ fun ChatsScreen(accessToken: String, onLogout: () -> Unit) {
                 IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }) {
                     Icon(if (searchOpen) Icons.Rounded.Close else Icons.Rounded.Search, contentDescription = "Поиск", tint = colors.onSurfaceVariant)
                 }
-                IconButton(onClick = { showSettings = true }) {
+                IconButton(onClick = {
+                    showSettings = true
+                    profileStatus = null
+                    scope.launch {
+                        LotusBackend.getDisplayName(accessToken).onSuccess { profileName = it }
+                            .onFailure { profileStatus = "Не удалось загрузить профиль." }
+                    }
+                }) {
                     Icon(Icons.Rounded.Settings, contentDescription = "Настройки", tint = colors.onSurfaceVariant)
                 }
             }
@@ -329,14 +337,51 @@ fun ChatsScreen(accessToken: String, onLogout: () -> Unit) {
             onDismissRequest = { showSettings = false },
             title = { Text("Настройки") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("Lotus · ранняя версия", color = colors.onSurfaceVariant)
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Уведомления")
-                        Switch(checked = notificationsEnabled, onCheckedChange = { notificationsEnabled = it })
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Профиль", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    OutlinedTextField(
+                        value = profileName,
+                        onValueChange = { profileName = it.take(40); profileStatus = null },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Ваше имя") },
+                        placeholder = { Text("Как вас будут видеть") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    Button(
+                        onClick = {
+                            profileNameSaving = true
+                            profileStatus = null
+                            scope.launch {
+                                LotusBackend.updateDisplayName(accessToken, profileName).onSuccess {
+                                    profileName = it
+                                    profileStatus = "Имя профиля сохранено."
+                                }.onFailure { failure ->
+                                    profileStatus = when {
+                                        failure.message.orEmpty().contains("display_name_length_invalid", true) ->
+                                            "Имя должно содержать от 2 до 40 символов."
+                                        else -> "Не удалось сохранить имя. Проверьте подключение и попробуйте снова."
+                                    }
+                                }
+                                profileNameSaving = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !profileNameSaving && profileName.trim().length in 2..40,
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text(if (profileNameSaving) "Сохраняем…" else "Сохранить имя")
                     }
+                    if (profileStatus != null) {
+                        Text(
+                            profileStatus!!,
+                            color = if (profileStatus!!.startsWith("Не удалось")) colors.error else colors.primary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Text("Lotus · личные сообщения", color = colors.onSurfaceVariant)
                     Text(
-                        "Сообщения синхронизируются через сервер. Сквозное шифрование ещё не подключено — не используйте приложение для секретной переписки.",
+                        "Сейчас сообщения передаются через сервер без сквозного шифрования. Не отправляйте секретные данные до подключения и проверки E2EE.",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.onSurfaceVariant
                     )
