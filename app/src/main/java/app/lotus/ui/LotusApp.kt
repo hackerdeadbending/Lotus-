@@ -55,20 +55,25 @@ fun LotusApp() {
         } else {
             encryptionReady = false
             encryptionError = null
-            runCatching {
+            val keyResult = runCatching {
                 withContext(Dispatchers.IO) { LotusCrypto.getOrCreatePublicKey(context) }
-            }.onSuccess { publicKey ->
-                LotusBackend.publishEncryptionPublicKey(token, publicKey)
-                    .onSuccess { encryptionReady = true }
-                    .onFailure { failure ->
+            }
+            if (keyResult.isSuccess) {
+                val publicKey = keyResult.getOrThrow()
+                val publishResult = LotusBackend.publishEncryptionPublicKey(token, publicKey)
+                publishResult.fold(
+                    onSuccess = { encryptionReady = true },
+                    onFailure = { failure ->
                         encryptionError = when {
                             failure.message.orEmpty().contains("encryption_public_key_invalid", true) ->
                                 "Не удалось опубликовать ключ шифрования. Обновите приложение."
                             else -> "Не удалось подключить защищённый обмен ключами. Проверьте интернет и повторите."
                         }
                     }
-            }.onFailure { failure ->
-                encryptionError = failure.message ?: "Не удалось подготовить локальный ключ шифрования."
+                )
+            } else {
+                encryptionError = keyResult.exceptionOrNull()?.message
+                    ?: "Не удалось подготовить локальный ключ шифрования."
             }
         }
     }
