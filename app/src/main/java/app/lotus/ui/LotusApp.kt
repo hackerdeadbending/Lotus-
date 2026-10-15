@@ -82,6 +82,8 @@ fun LotusApp() {
                     onSuccess = { encryptionReady = true },
                     onFailure = { failure ->
                         encryptionError = when {
+                            failure.message.orEmpty().contains("encryption_key_already_registered", true) ->
+                                "Для этого аккаунта уже зарегистрирован ключ другого устройства. Одновременная работа на нескольких устройствах и перенос ключей пока не поддерживаются."
                             failure.message.orEmpty().contains("encryption_public_key_invalid", true) ->
                                 "Не удалось опубликовать ключ шифрования. Обновите приложение."
                             else -> "Не удалось подключить защищённый обмен ключами. Проверьте интернет и повторите."
