@@ -83,7 +83,7 @@ jobs:
         with:
           tag_name: v0.1.${{ github.run_number }}
           name: Lotus ${{ github.run_number }}
-          body: "Lotus Android UI prototype. This build passed APK structure/signature checks and an Android 13 emulator install/launch test. End-to-end encryption and message delivery are not implemented yet."
+          body: "Lotus Android MVP: email authentication and password recovery, profile name editing, one-time chat invitations, direct text messaging, client-side ECDH/AES-GCM message encryption, Android Keystore-protected local keys and session tokens, and key-fingerprint display. Limitations: one device per account, no key recovery, attachments, group chats, or background push notifications. The CI install/launch check is not a security audit or a full end-to-end functional test; verify encryption with two accounts before relying on it for sensitive communication."
           files: app/build/outputs/apk/debug/app-debug.apk
           prerelease: true
         env:
