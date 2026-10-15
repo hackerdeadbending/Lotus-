@@ -192,7 +192,16 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                                 statusMessage = "Запрос обработан. Контакт появится, когда другой пользователь Lotus тоже добавит ваш номер."
                             }
                         }.onFailure { failure ->
-                            statusMessage = "Ошибка: " + (failure.message ?: "не удалось проверить контакт")
+                            statusMessage = when (failure.message) {
+                                "verified_phone_required" ->
+                                    "Для поиска контактов нужно отдельно подтвердить номер телефона. Вход по email при этом остаётся доступен."
+                                "phone_must_be_e164" ->
+                                    "Введите номер в международном формате, например +39 123 456 7890."
+                                "rate_limited" ->
+                                    "Слишком много попыток. Подождите минуту и попробуйте снова."
+                                else ->
+                                    "Ошибка: " + (failure.message ?: "не удалось проверить контакт")
+                            }
                         }
                         checking = false
                     }
