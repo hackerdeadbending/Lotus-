@@ -1,6 +1,8 @@
 package app.lotus.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,10 +30,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import android.content.Intent
+import android.graphics.Bitmap
 import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.asImageBitmap
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 import app.lotus.data.LotusBackend
 import app.lotus.data.LotusChat
 import kotlinx.coroutines.launch
@@ -53,6 +59,7 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
     var phone by remember { mutableStateOf("") }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
+    var showQr by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val contactPicker = rememberLauncherForActivityResult(
@@ -155,12 +162,24 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                     DiscoveryOption(
                         modifier = Modifier.weight(1f),
                         icon = { Icon(Icons.Rounded.QrCode2, contentDescription = null) },
-                        title = "QR-код"
+                        title = "QR-код",
+                        subtitle = "Установить Lotus",
+                        onClick = { showQr = true }
                     )
                     DiscoveryOption(
                         modifier = Modifier.weight(1f),
                         icon = { Icon(Icons.Rounded.Share, contentDescription = null) },
-                        title = "Приглашение"
+                        title = "Пригласить",
+                        subtitle = "Поделиться ссылкой",
+                        onClick = {
+                            val inviteText = "Присоединяйся к Lotus — личному пространству для общения. Скачать приложение: https://github.com/hackerdeadbending/Lotus-/releases"
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "Приглашение в Lotus")
+                                putExtra(Intent.EXTRA_TEXT, inviteText)
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Пригласить в Lotus"))
+                        }
                     )
                 }
 
@@ -218,17 +237,69 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
         },
         shape = RoundedCornerShape(28.dp)
     )
+
+    if (showQr) {
+        val inviteUrl = "https://github.com/hackerdeadbending/Lotus-/releases"
+        val qrBitmap = remember(inviteUrl) {
+            runCatching {
+                val matrix = QRCodeWriter().encode(inviteUrl, BarcodeFormat.QR_CODE, 640, 640)
+                Bitmap.createBitmap(640, 640, Bitmap.Config.ARGB_8888).also { bitmap ->
+                    for (x in 0 until 640) {
+                        for (y in 0 until 640) {
+                            bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                        }
+                    }
+                }
+            }.getOrNull()
+        }
+        AlertDialog(
+            onDismissRequest = { showQr = false },
+            title = { Text("Приглашение в Lotus") },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (qrBitmap != null) {
+                        Image(
+                            bitmap = qrBitmap.asImageBitmap(),
+                            contentDescription = "QR-код со ссылкой на установку Lotus",
+                            modifier = Modifier.fillMaxWidth().padding(8.dp)
+                        )
+                    } else {
+                        Text("Не удалось создать QR-код. Используйте кнопку «Пригласить».")
+                    }
+                    Text(
+                        "Отсканируйте код, чтобы открыть страницу загрузки Lotus. Это ссылка на приложение, не личный код пользователя.",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        color = colors.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, inviteUrl)
+                    }
+                    context.startActivity(Intent.createChooser(sendIntent, "Поделиться Lotus"))
+                }) { Text("Поделиться ссылкой") }
+            },
+            dismissButton = { TextButton(onClick = { showQr = false }) { Text("Готово") } },
+            shape = RoundedCornerShape(24.dp)
+        )
+    }
 }
 
 @Composable
 private fun DiscoveryOption(
     modifier: Modifier = Modifier,
     icon: @Composable () -> Unit,
-    title: String
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
     Surface(
-        modifier = modifier,
+        modifier = modifier.clickable(onClick = onClick),
         color = colors.surfaceVariant.copy(alpha = 0.65f),
         shape = RoundedCornerShape(16.dp)
     ) {
@@ -249,7 +320,7 @@ private fun DiscoveryOption(
                 ) { icon() }
             }
             Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
-            Text("Скоро", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, textAlign = TextAlign.Center)
         }
     }
 }
