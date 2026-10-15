@@ -33,6 +33,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import app.lotus.data.LotusBackend
+import app.lotus.data.LotusChat
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.Composable
@@ -48,7 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit) {
+fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatStarted: (LotusChat) -> Unit) {
     var phone by remember { mutableStateOf("") }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
@@ -178,14 +179,21 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit) {
                     checking = true
                     statusMessage = null
                     scope.launch {
-                        LotusBackend.lookupContact(accessToken, phone.trim())
-                            .onSuccess { result ->
-                                statusMessage = if (result.mutual) "Взаимный контакт найден. Подключение чатов — следующий этап."
-                                else "Запрос обработан. Контакт появится, когда другой пользователь Lotus тоже добавит ваш номер."
+                        val lookup = LotusBackend.lookupContact(accessToken, phone.trim())
+                        lookup.onSuccess { result ->
+                            if (result.mutual && !result.contactId.isNullOrBlank()) {
+                                LotusBackend.startChat(accessToken, result.contactId).onSuccess { chat ->
+                                    onChatStarted(chat)
+                                    onDismiss()
+                                }.onFailure { failure ->
+                                    statusMessage = "Не удалось открыть чат: " + (failure.message ?: "ошибка сервера")
+                                }
+                            } else {
+                                statusMessage = "Запрос обработан. Контакт появится, когда другой пользователь Lotus тоже добавит ваш номер."
                             }
-                            .onFailure { failure ->
-                                statusMessage = "Ошибка: " + (failure.message ?: "не удалось проверить контакт")
-                            }
+                        }.onFailure { failure ->
+                            statusMessage = "Ошибка: " + (failure.message ?: "не удалось проверить контакт")
+                        }
                         checking = false
                     }
                 },
