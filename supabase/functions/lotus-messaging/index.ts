@@ -91,6 +91,13 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "create_invite") {
+      const { data: ownProfile, error: ownProfileError } = await admin.from("lotus_profiles")
+        .select("encryption_public_key")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (ownProfileError || !ownProfile) return reply({ error: "profile_unavailable" }, 503);
+      if (!ownProfile.encryption_public_key) return reply({ error: "encryption_keys_not_ready" }, 409);
+
       const { count, error: countError } = await admin.from("lotus_invites")
         .select("id", { count: "exact", head: true })
         .eq("creator_id", user.id)
@@ -125,6 +132,14 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       if (!invite) return reply({ error: "invite_invalid_or_expired" }, 404);
       if (invite.creator_id === user.id) return reply({ error: "invite_cannot_accept_own" }, 400);
+
+      const { data: keyProfiles, error: keyProfilesError } = await admin.from("lotus_profiles")
+        .select("user_id, encryption_public_key")
+        .in("user_id", [invite.creator_id, user.id]);
+      if (keyProfilesError) return reply({ error: "profile_unavailable" }, 503);
+      if ((keyProfiles ?? []).length !== 2 || keyProfiles.some((profile) => !profile.encryption_public_key)) {
+        return reply({ error: "encryption_keys_not_ready" }, 409);
+      }
 
       const { data: claimed, error: claimError } = await admin.from("lotus_invites")
         .update({ accepted_by: user.id, accepted_at: new Date().toISOString() })
@@ -192,9 +207,15 @@ Deno.serve(async (req: Request) => {
       }
       if (contactId === user.id) return reply({ error: "cannot_chat_with_self" }, 400);
 
-      const { data: target } = await admin.from("lotus_profiles").select("user_id, phone_verified, display_name, encryption_public_key")
-        .eq("user_id", contactId).eq("phone_verified", true).maybeSingle();
+      const [{ data: ownProfile }, { data: target }] = await Promise.all([
+        admin.from("lotus_profiles").select("encryption_public_key").eq("user_id", user.id).maybeSingle(),
+        admin.from("lotus_profiles").select("user_id, phone_verified, display_name, encryption_public_key")
+          .eq("user_id", contactId).eq("phone_verified", true).maybeSingle(),
+      ]);
       if (!target) return reply({ error: "contact_unavailable" }, 404);
+      if (!ownProfile?.encryption_public_key || !target.encryption_public_key) {
+        return reply({ error: "encryption_keys_not_ready" }, 409);
+      }
 
       const [{ data: forward }, { data: reverse }] = await Promise.all([
         admin.from("lotus_contact_edges").select("owner_id").eq("owner_id", user.id).eq("contact_id", contactId).maybeSingle(),
