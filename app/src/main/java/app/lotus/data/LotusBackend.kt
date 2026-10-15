@@ -194,7 +194,8 @@ object LotusBackend {
             peerId = row.optString("peerId"),
             displayName = row.optString("displayName").ifBlank { "Lotus contact" },
             lastMessage = row.optString("lastMessage"),
-            lastMessageAt = row.optString("lastMessageAt")
+            lastMessageAt = row.optString("lastMessageAt"),
+            peerPublicKey = row.optString("peerPublicKey").takeIf { it.isNotBlank() && it != "null" }
         )
     }
 
