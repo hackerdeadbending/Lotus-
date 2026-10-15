@@ -117,12 +117,13 @@ fun ChatsScreen(
     var backendError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val currentUserId = remember(accessToken) { LotusBackend.userIdFromAccessToken(accessToken).orEmpty() }
     val colors = MaterialTheme.colorScheme
 
     fun toPreview(chat: LotusChat): ChatPreview {
         val lastMessage = chat.lastMessage.ifBlank { "Начните общение" }
         val readableLastMessage = if (lastMessage.startsWith("LOTUS1:")) {
-            runCatching { LotusCrypto.decrypt(context, chat.id, chat.peerPublicKey, lastMessage) }
+            runCatching { LotusCrypto.decrypt(context, currentUserId, chat.id, chat.peerPublicKey, lastMessage) }
                 .getOrElse { "Зашифрованное сообщение" }
         } else lastMessage
         return ChatPreview(
@@ -160,7 +161,7 @@ fun ChatsScreen(
                 .onSuccess { result ->
                     messages = result.map { message ->
                         val readableBody = runCatching {
-                            LotusCrypto.decrypt(context, conversationId, selectedChat?.peerPublicKey, message.body)
+                            LotusCrypto.decrypt(context, currentUserId, conversationId, selectedChat?.peerPublicKey, message.body)
                         }.getOrElse { "Не удалось расшифровать сообщение" }
                         LocalMessage(message.id, readableBody, message.mine, displayTime(message.createdAt))
                     }
@@ -199,7 +200,7 @@ fun ChatsScreen(
                     scope.launch {
                         val encryptedResult = runCatching {
                             withContext(Dispatchers.IO) {
-                                LotusCrypto.encrypt(context, activeChat.id, activeChat.peerPublicKey, text)
+                                LotusCrypto.encrypt(context, currentUserId, activeChat.id, activeChat.peerPublicKey, text)
                             }
                         }
                         if (encryptedResult.isFailure) {
