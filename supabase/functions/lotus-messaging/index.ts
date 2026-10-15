@@ -34,7 +34,7 @@ Deno.serve(async (req: Request) => {
     // still requires reciprocal contact edges below, and contact discovery separately
     // requires a verified phone number in lookup-contact.
 
-    let body: { action?: unknown; contactId?: unknown; conversationId?: unknown; text?: unknown };
+    let body: { action?: unknown; contactId?: unknown; conversationId?: unknown; text?: unknown; inviteCode?: unknown };
     try {
       body = await req.json();
     } catch {
@@ -43,6 +43,64 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const action = body.action;
+
+    if (action === "create_invite") {
+      const random = new Uint8Array(12);
+      crypto.getRandomValues(random);
+      const inviteCode = Array.from(random, (value) => value.toString(16).padStart(2, "0")).join("").toUpperCase();
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(inviteCode));
+      const tokenHash = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+      const { error } = await admin.from("lotus_invites").insert({
+        creator_id: user.id,
+        token_hash: tokenHash,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+      if (error) return reply({ error: "invite_create_failed" }, 503);
+      return reply({ inviteCode, expiresInDays: 7 });
+    }
+
+    if (action === "accept_invite") {
+      const inviteCode = typeof body.inviteCode === "string" ? body.inviteCode.trim().toUpperCase() : "";
+      if (!/^[A-F0-9]{24}$/.test(inviteCode)) return reply({ error: "invite_code_invalid" }, 400);
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(inviteCode));
+      const tokenHash = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+      const { data: invite } = await admin.from("lotus_invites")
+        .select("id, creator_id")
+        .eq("token_hash", tokenHash)
+        .is("accepted_by", null)
+        .gt("expires_at", new Date().toISOString())
+        .maybeSingle();
+      if (!invite) return reply({ error: "invite_invalid_or_expired" }, 404);
+      if (invite.creator_id === user.id) return reply({ error: "invite_cannot_accept_own" }, 400);
+
+      const [participantA, participantB] = [invite.creator_id, user.id].sort();
+      const { data: conversation, error: conversationError } = await admin.from("lotus_conversations")
+        .upsert({ participant_a: participantA, participant_b: participantB }, { onConflict: "participant_a,participant_b" })
+        .select("id, participant_a, participant_b, created_at, last_message_at").single();
+      if (conversationError || !conversation) return reply({ error: "chat_create_failed" }, 503);
+
+      const { data: claimed, error: claimError } = await admin.from("lotus_invites")
+        .update({ accepted_by: user.id, accepted_at: new Date().toISOString() })
+        .eq("id", invite.id)
+        .is("accepted_by", null)
+        .select("id")
+        .maybeSingle();
+      if (claimError || !claimed) return reply({ error: "invite_invalid_or_expired" }, 409);
+
+      const { data: profile } = await admin.from("lotus_profiles")
+        .select("display_name")
+        .eq("user_id", invite.creator_id)
+        .maybeSingle();
+      return reply({
+        chat: {
+          id: conversation.id,
+          peerId: invite.creator_id,
+          displayName: profile?.display_name ?? "Lotus contact",
+          lastMessage: "",
+          lastMessageAt: conversation.created_at,
+        },
+      });
+    }
 
     if (action === "list_chats") {
       const { data: conversations, error } = await admin
