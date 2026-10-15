@@ -25,6 +25,10 @@ object LotusBackend {
             .apply()
     }
 
+    fun clearSession(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+    }
+
     suspend fun sendOtp(phone: String): Result<Unit> = request(
         path = "/auth/v1/otp",
         method = "POST",
