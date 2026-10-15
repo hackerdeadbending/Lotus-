@@ -82,7 +82,7 @@ private data class LocalMessage(
 )
 
 @Composable
-fun ChatsScreen(accessToken: String) {
+fun ChatsScreen(accessToken: String, onLogout: () -> Unit) {
     var chats by remember { mutableStateOf<List<ChatPreview>>(emptyList()) }
     var selectedChat by remember { mutableStateOf<ChatPreview?>(null) }
     var messages by remember { mutableStateOf<List<LocalMessage>>(emptyList()) }
@@ -341,7 +341,13 @@ fun ChatsScreen(accessToken: String) {
                     )
                 }
             },
-            confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Готово") } }
+            confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Готово") } },
+            dismissButton = {
+                TextButton(onClick = {
+                    showSettings = false
+                    onLogout()
+                }) { Text("Выйти из аккаунта") }
+            }
         )
     }
 
