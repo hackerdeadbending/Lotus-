@@ -119,7 +119,7 @@ Deno.serve(async (req: Request) => {
         .order("created_at", { ascending: true })
         .limit(200);
       if (error) return reply({ error: "messages_unavailable" }, 503);
-      return reply({ messages: messages ?? [] });
+      return reply({ messages: (messages ?? []).map((message) => ({ ...message, mine: message.sender_id === user.id })) });
     }
 
     if (action === "send_message") {
