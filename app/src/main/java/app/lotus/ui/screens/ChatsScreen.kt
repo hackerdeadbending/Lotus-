@@ -301,6 +301,13 @@ fun ChatsScreen(
                 }
             }
 
+            if (!encryptionReady) {
+                EncryptionStatusBanner(
+                    error = encryptionError,
+                    onRetry = onRetryEncryption
+                )
+            }
+
             if (searchOpen) {
                 OutlinedTextField(
                     value = searchQuery,
@@ -512,6 +519,12 @@ private fun ConversationScreen(
                 IconButton(onClick = {}) { Icon(Icons.Rounded.MoreVert, contentDescription = "Ещё", tint = colors.onSurfaceVariant) }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outline.copy(alpha = 0.35f)))
+            if (!encryptionReady) {
+                EncryptionStatusBanner(
+                    error = encryptionError,
+                    onRetry = onRetryEncryption
+                )
+            }
             if (loading && messages.isEmpty()) {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else if (messages.isEmpty()) {
@@ -620,6 +633,31 @@ private fun Avatar(name: String, modifier: Modifier = Modifier) {
     val index = (name.hashCode() and Int.MAX_VALUE) % palettes.size
     Box(modifier.clip(CircleShape).background(palettes[index].first), contentAlignment = Alignment.Center) {
         Text(name.trim().firstOrNull()?.uppercase() ?: "✿", color = palettes[index].second, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun EncryptionStatusBanner(error: String?, onRetry: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+        color = colors.errorContainer.copy(alpha = 0.7f),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Защищённый канал подключается", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+                Text(
+                    error ?: "Подготавливаем ключ шифрования для этого устройства. Отправка сообщений пока недоступна.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onErrorContainer
+                )
+            }
+            TextButton(onClick = onRetry) { Text("Повторить") }
+        }
     }
 }
 
