@@ -24,6 +24,7 @@ import app.lotus.data.LotusBackend
 import app.lotus.data.LotusCrypto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import app.lotus.ui.screens.ChatsScreen
 import app.lotus.ui.screens.EmailAuthScreen
 import app.lotus.ui.screens.SplashScreen
@@ -40,6 +41,17 @@ fun LotusApp() {
     LaunchedEffect(Unit) {
         val refresh = LotusBackend.refreshToken(context)
         if (!refresh.isNullOrBlank()) {
+            LotusBackend.refreshSession(refresh).onSuccess { session ->
+                LotusBackend.saveSession(context, session.first, session.second ?: refresh)
+                accessToken = session.first
+            }
+        }
+    }
+
+    LaunchedEffect(accessToken) {
+        while (!accessToken.isNullOrBlank()) {
+            delay(45 * 60 * 1000L)
+            val refresh = LotusBackend.refreshToken(context) ?: continue
             LotusBackend.refreshSession(refresh).onSuccess { session ->
                 LotusBackend.saveSession(context, session.first, session.second ?: refresh)
                 accessToken = session.first
