@@ -45,6 +45,13 @@ Deno.serve(async (req: Request) => {
     const action = body.action;
 
     if (action === "create_invite") {
+      const { count, error: countError } = await admin.from("lotus_invites")
+        .select("id", { count: "exact", head: true })
+        .eq("creator_id", user.id)
+        .gt("created_at", new Date(Date.now() - 60 * 60 * 1000).toISOString());
+      if (countError) return reply({ error: "invite_create_failed" }, 503);
+      if ((count ?? 0) >= 10) return reply({ error: "invite_rate_limited" }, 429);
+
       const random = new Uint8Array(12);
       crypto.getRandomValues(random);
       const inviteCode = Array.from(random, (value) => value.toString(16).padStart(2, "0")).join("").toUpperCase();
@@ -73,19 +80,20 @@ Deno.serve(async (req: Request) => {
       if (!invite) return reply({ error: "invite_invalid_or_expired" }, 404);
       if (invite.creator_id === user.id) return reply({ error: "invite_cannot_accept_own" }, 400);
 
+      const { data: claimed, error: claimError } = await admin.from("lotus_invites")
+        .update({ accepted_by: user.id, accepted_at: new Date().toISOString() })
+        .eq("id", invite.id)
+        .is("accepted_by", null)
+        .gt("expires_at", new Date().toISOString())
+        .select("id")
+        .maybeSingle();
+      if (claimError || !claimed) return reply({ error: "invite_invalid_or_expired" }, 409);
+
       const [participantA, participantB] = [invite.creator_id, user.id].sort();
       const { data: conversation, error: conversationError } = await admin.from("lotus_conversations")
         .upsert({ participant_a: participantA, participant_b: participantB }, { onConflict: "participant_a,participant_b" })
         .select("id, participant_a, participant_b, created_at, last_message_at").single();
       if (conversationError || !conversation) return reply({ error: "chat_create_failed" }, 503);
-
-      const { data: claimed, error: claimError } = await admin.from("lotus_invites")
-        .update({ accepted_by: user.id, accepted_at: new Date().toISOString() })
-        .eq("id", invite.id)
-        .is("accepted_by", null)
-        .select("id")
-        .maybeSingle();
-      if (claimError || !claimed) return reply({ error: "invite_invalid_or_expired" }, 409);
 
       const { data: profile } = await admin.from("lotus_profiles")
         .select("display_name")
