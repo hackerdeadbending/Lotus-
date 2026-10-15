@@ -429,7 +429,7 @@ fun ChatsScreen(
                     }
                     Text("Lotus · личные сообщения", color = colors.onSurfaceVariant)
                     Text(
-                        "Сейчас сообщения передаются через сервер без сквозного шифрования. Не отправляйте секретные данные до подключения и проверки E2EE.",
+                        "Сообщения шифруются на устройстве перед отправкой. Ключ привязан к этому устройству; перенос и восстановление ключей пока не реализованы.",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.onSurfaceVariant
                     )
@@ -570,7 +570,7 @@ private fun ConversationScreen(
                 }
             }
             Text(
-                "Сообщения передаются через сервер; сквозное шифрование пока не реализовано.",
+                "Сообщения шифруются на устройстве перед отправкой. Перенос и восстановление ключей ещё не реализованы.",
                 Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant,
@@ -674,6 +674,7 @@ private fun displayTime(value: String): String {
 private fun friendlyMessagingError(message: String?): String {
     val value = message.orEmpty()
     return when {
+        value.contains("encryption_required", true) -> "Сервер принимает только зашифрованные сообщения. Обновите Lotus до последней версии." 
         value.contains("verified_phone_required", true) -> "Сначала войдите с подтверждённым номером телефона."
         value.contains("mutual_contact_required", true) -> "Сначала оба пользователя должны добавить друг друга в контакты Lotus."
         value.contains("server_not_configured", true) || value.contains("HTTP 404", true) ->
