@@ -44,6 +44,20 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const action = body.action;
 
+    if (action === "update_profile") {
+      const displayName = typeof body.displayName === "string" ? body.displayName.trim().replace(/\s+/g, " ") : "";
+      if (displayName.length < 2 || displayName.length > 40) {
+        return reply({ error: "display_name_length_invalid" }, 400);
+      }
+      const { data: profile, error } = await admin.from("lotus_profiles")
+        .update({ display_name: displayName, updated_at: new Date().toISOString() })
+        .eq("user_id", user.id)
+        .select("display_name")
+        .single();
+      if (error || !profile) return reply({ error: "profile_update_failed" }, 503);
+      return reply({ displayName: profile.display_name });
+    }
+
     if (action === "create_invite") {
       const { count, error: countError } = await admin.from("lotus_invites")
         .select("id", { count: "exact", head: true })
