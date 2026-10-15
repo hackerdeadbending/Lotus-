@@ -3,12 +3,12 @@ package app.lotus.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,9 +45,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,76 +59,146 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.lotus.data.LotusBackend
+import app.lotus.data.LotusChat
+import app.lotus.data.LotusMessage
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-data class ChatPreview(
+private data class ChatPreview(
     val id: String,
+    val peerId: String,
     val name: String,
     val lastMessage: String,
     val time: String,
-    val unread: Int = 0,
     val subtitle: String = "Lotus"
 )
 
-private data class LocalMessage(val text: String, val mine: Boolean, val time: String)
+private data class LocalMessage(
+    val id: String,
+    val text: String,
+    val mine: Boolean,
+    val time: String
+)
 
 @Composable
 fun ChatsScreen(accessToken: String) {
-    var chats by remember {
-        mutableStateOf(
-            listOf(
-                ChatPreview("1", "Аня", "Всё хорошо, не волнуйся", "12:41", 2, "была недавно"),
-                ChatPreview("2", "Дом", "Мама: приезжайте аккуратно", "11:18", 0, "3 участника"),
-                ChatPreview("3", "Игорь", "Документы отправил", "Вчера", 0, "был сегодня"),
-                ChatPreview("4", "Сестра", "Сообщение удалено", "Пн", 0, "была вчера"),
-                ChatPreview("5", "Коллеги", "Встреча перенесена", "Вс", 0, "5 участников")
-            )
-        )
-    }
+    var chats by remember { mutableStateOf<List<ChatPreview>>(emptyList()) }
     var selectedChat by remember { mutableStateOf<ChatPreview?>(null) }
+    var messages by remember { mutableStateOf<List<LocalMessage>>(emptyList()) }
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var showNewChat by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var notificationsEnabled by remember { mutableStateOf(true) }
     var draft by remember { mutableStateOf("") }
-    var messages by remember {
-        mutableStateOf(
-            mapOf(
-                "1" to listOf(
-                    LocalMessage("Привет! Как ты?", false, "12:38"),
-                    LocalMessage("Всё хорошо, не волнуйся", false, "12:41"),
-                    LocalMessage("Хорошо 💚 Напиши, когда будешь дома", true, "12:42")
-                ),
-                "2" to listOf(
-                    LocalMessage("В воскресенье собираемся у нас", false, "11:10"),
-                    LocalMessage("Мама: приезжайте аккуратно", false, "11:18")
-                )
-            )
-        )
-    }
+    var loadingChats by remember { mutableStateOf(true) }
+    var loadingMessages by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
+    var backendError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
     val colors = MaterialTheme.colorScheme
-    val activeChat = selectedChat
 
+    fun toPreview(chat: LotusChat) = ChatPreview(
+        id = chat.id,
+        peerId = chat.peerId,
+        name = chat.displayName,
+        lastMessage = chat.lastMessage.ifBlank { "Начните общение" },
+        time = displayTime(chat.lastMessageAt),
+        subtitle = "Личный чат"
+    )
+
+    LaunchedEffect(accessToken) {
+        while (true) {
+            LotusBackend.listChats(accessToken)
+                .onSuccess { result ->
+                    chats = result.map(::toPreview)
+                    backendError = null
+                    loadingChats = false
+                }
+                .onFailure { failure ->
+                    backendError = friendlyMessagingError(failure.message)
+                    loadingChats = false
+                }
+            delay(5000)
+        }
+    }
+
+    LaunchedEffect(accessToken, selectedChat?.id) {
+        val conversationId = selectedChat?.id ?: return@LaunchedEffect
+        loadingMessages = true
+        while (true) {
+            LotusBackend.listMessages(accessToken, conversationId)
+                .onSuccess { result ->
+                    messages = result.map { message ->
+                        LocalMessage(message.id, message.body, message.mine, displayTime(message.createdAt))
+                    }
+                    backendError = null
+                    loadingMessages = false
+                }
+                .onFailure { failure ->
+                    backendError = friendlyMessagingError(failure.message)
+                    loadingMessages = false
+                }
+            delay(3000)
+        }
+    }
+
+    val activeChat = selectedChat
     if (activeChat != null) {
         ConversationScreen(
             chat = activeChat,
-            messages = messages[activeChat.id].orEmpty(),
+            messages = messages,
             draft = draft,
+            sending = sending,
+            loading = loadingMessages,
             onDraftChange = { draft = it },
-            onBack = { selectedChat = null; draft = "" },
+            onBack = {
+                selectedChat = null
+                draft = ""
+                messages = emptyList()
+            },
             onSend = {
                 val text = draft.trim()
-                if (text.isNotEmpty()) {
-                    val updated = messages[activeChat.id].orEmpty() + LocalMessage(text, true, "сейчас")
-                    messages = messages + (activeChat.id to updated)
-                    chats = chats.map {
-                        if (it.id == activeChat.id) it.copy(lastMessage = text, time = "сейчас", unread = 0) else it
+                if (text.isNotEmpty() && !sending) {
+                    sending = true
+                    scope.launch {
+                        LotusBackend.sendMessage(accessToken, activeChat.id, text)
+                            .onSuccess { sent ->
+                                messages = messages + LocalMessage(
+                                    sent.id, sent.body, true, displayTime(sent.createdAt)
+                                )
+                                chats = chats.map { chat ->
+                                    if (chat.id == activeChat.id) chat.copy(
+                                        lastMessage = sent.body,
+                                        time = displayTime(sent.createdAt)
+                                    ) else chat
+                                }
+                                draft = ""
+                                backendError = null
+                            }
+                            .onFailure { failure ->
+                                backendError = friendlyMessagingError(failure.message)
+                            }
+                        sending = false
                     }
-                    selectedChat = activeChat.copy(lastMessage = text, time = "сейчас", unread = 0)
-                    draft = ""
                 }
             }
         )
+        if (backendError != null) {
+            Surface(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                color = colors.errorContainer,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    backendError!!,
+                    modifier = Modifier.padding(10.dp),
+                    color = colors.onErrorContainer,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
         return
     }
 
@@ -148,13 +221,27 @@ fun ChatsScreen(accessToken: String) {
             ) {
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(38.dp).clip(RoundedCornerShape(13.dp)).background(colors.primaryContainer), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier.size(38.dp).clip(RoundedCornerShape(13.dp)).background(colors.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text("✿", color = colors.onPrimaryContainer, fontSize = 25.sp)
                         }
                         androidx.compose.foundation.layout.Spacer(Modifier.width(10.dp))
-                        Text("Lotus", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.8).sp), color = colors.onBackground)
+                        Text(
+                            "Lotus",
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = (-0.8).sp
+                            ),
+                            color = colors.onBackground
+                        )
                     }
-                    Text("ВАШЕ ЛИЧНОЕ ПРОСТРАНСТВО", style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.4.sp), color = colors.onSurfaceVariant)
+                    Text(
+                        "ВАШЕ ЛИЧНОЕ ПРОСТРАНСТВО",
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.4.sp),
+                        color = colors.onSurfaceVariant
+                    )
                 }
                 IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }) {
                     Icon(if (searchOpen) Icons.Rounded.Close else Icons.Rounded.Search, contentDescription = "Поиск", tint = colors.onSurfaceVariant)
@@ -195,23 +282,31 @@ fun ChatsScreen(accessToken: String) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Сообщения", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold), color = colors.onBackground, modifier = Modifier.weight(1f))
-                Text(chats.size.toString() + " чатов", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                Text("${chats.size} чатов", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
             }
 
             val visibleChats = chats.filter { it.name.contains(searchQuery, true) || it.lastMessage.contains(searchQuery, true) }
-            if (visibleChats.isEmpty()) {
-                Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            when {
+                loadingChats && visibleChats.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                visibleChats.isEmpty() -> Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(Modifier.size(70.dp).clip(CircleShape).background(colors.surface), contentAlignment = Alignment.Center) {
                             Icon(Icons.Rounded.Search, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(30.dp))
                         }
-                        androidx.compose.foundation.layout.Spacer(Modifier.height(16.dp))
-                        Text("Ничего не найдено", style = MaterialTheme.typography.titleMedium, color = colors.onBackground)
-                        Text("Попробуйте другое имя или сообщение", color = colors.onSurfaceVariant, textAlign = TextAlign.Center)
+                        Text(if (searchQuery.isBlank()) "Здесь пока тихо" else "Ничего не найдено", style = MaterialTheme.typography.titleMedium, color = colors.onBackground)
+                        Text(
+                            if (backendError != null) backendError!! else if (searchQuery.isBlank()) "Добавьте человека, чтобы начать личный чат." else "Попробуйте другое имя или сообщение.",
+                            color = colors.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        if (backendError == null && searchQuery.isBlank()) {
+                            Button(onClick = { showNewChat = true }, shape = RoundedCornerShape(16.dp)) { Text("Добавить человека") }
+                        }
                     }
                 }
-            } else {
-                LazyColumn(
+                else -> LazyColumn(
                     Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -219,8 +314,8 @@ fun ChatsScreen(accessToken: String) {
                     items(visibleChats, key = { it.id }) { chat ->
                         ChatListItem(chat) {
                             selectedChat = chat
+                            messages = emptyList()
                             draft = ""
-                            chats = chats.map { if (it.id == chat.id) it.copy(unread = 0) else it }
                         }
                     }
                 }
@@ -234,12 +329,16 @@ fun ChatsScreen(accessToken: String) {
             title = { Text("Настройки") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("Lotus · предварительная версия", color = colors.onSurfaceVariant)
+                    Text("Lotus · ранняя версия", color = colors.onSurfaceVariant)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Уведомления")
                         Switch(checked = notificationsEnabled, onCheckedChange = { notificationsEnabled = it })
                     }
-                    Text("Чаты пока работают как локальный макет. Регистрация, защищённая доставка и синхронизация ещё не подключены.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    Text(
+                        "Сообщения синхронизируются через сервер. Сквозное шифрование ещё не подключено — не используйте приложение для секретной переписки.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant
+                    )
                 }
             },
             confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Готово") } }
@@ -247,7 +346,17 @@ fun ChatsScreen(accessToken: String) {
     }
 
     if (showNewChat) {
-        ContactDiscoveryDialog(accessToken = accessToken, onDismiss = { showNewChat = false })
+        ContactDiscoveryDialog(
+            accessToken = accessToken,
+            onDismiss = { showNewChat = false },
+            onChatStarted = { chat ->
+                val preview = toPreview(chat)
+                chats = (listOf(preview) + chats.filterNot { it.id == preview.id })
+                selectedChat = preview
+                messages = emptyList()
+                draft = ""
+            }
+        )
     }
 }
 
@@ -256,6 +365,8 @@ private fun ConversationScreen(
     chat: ChatPreview,
     messages: List<LocalMessage>,
     draft: String,
+    sending: Boolean,
+    loading: Boolean,
     onDraftChange: (String) -> Unit,
     onBack: () -> Unit,
     onSend: () -> Unit
@@ -281,8 +392,13 @@ private fun ConversationScreen(
                         maxLines = 4
                     )
                     androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
-                    IconButton(onClick = onSend, enabled = draft.isNotBlank(), modifier = Modifier.size(50.dp).clip(CircleShape).background(colors.primary)) {
-                        Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Отправить", tint = colors.onPrimary)
+                    IconButton(
+                        onClick = onSend,
+                        enabled = draft.isNotBlank() && !sending,
+                        modifier = Modifier.size(50.dp).clip(CircleShape).background(colors.primary)
+                    ) {
+                        if (sending) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Отправить", tint = colors.onPrimary)
                     }
                 }
             }
@@ -295,16 +411,17 @@ private fun ConversationScreen(
                 androidx.compose.foundation.layout.Spacer(Modifier.width(11.dp))
                 Column(Modifier.weight(1f)) {
                     Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(chat.subtitle, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    Text("Личный чат", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
                 IconButton(onClick = {}) { Icon(Icons.Rounded.MoreVert, contentDescription = "Ещё", tint = colors.onSurfaceVariant) }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outline.copy(alpha = 0.35f)))
-            if (messages.isEmpty()) {
+            if (loading && messages.isEmpty()) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            } else if (messages.isEmpty()) {
                 Box(Modifier.weight(1f).fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Avatar(chat.name, Modifier.size(72.dp))
-                        androidx.compose.foundation.layout.Spacer(Modifier.height(14.dp))
                         Text(chat.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text("Это начало вашей истории", color = colors.onSurfaceVariant)
                     }
@@ -315,27 +432,36 @@ private fun ConversationScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(messages) { message ->
+                    items(messages, key = { it.id }) { message ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.mine) Arrangement.End else Arrangement.Start) {
                             Column(Modifier.fillMaxWidth(0.84f), horizontalAlignment = if (message.mine) Alignment.End else Alignment.Start) {
                                 Text(
                                     message.text,
-                                    modifier = Modifier.clip(RoundedCornerShape(topStart = 19.dp, topEnd = 19.dp, bottomStart = if (message.mine) 19.dp else 5.dp, bottomEnd = if (message.mine) 5.dp else 19.dp))
-                                        .background(if (message.mine) colors.primaryContainer else colors.surface)
+                                    modifier = Modifier.clip(RoundedCornerShape(
+                                        topStart = 19.dp, topEnd = 19.dp,
+                                        bottomStart = if (message.mine) 19.dp else 5.dp,
+                                        bottomEnd = if (message.mine) 5.dp else 19.dp
+                                    )).background(if (message.mine) colors.primaryContainer else colors.surface)
                                         .padding(horizontal = 15.dp, vertical = 11.dp),
                                     color = if (message.mine) colors.onPrimaryContainer else colors.onSurface,
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(message.time, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                                    if (message.mine) Icon(Icons.Rounded.Check, contentDescription = "Локально", tint = colors.primary, modifier = Modifier.size(13.dp))
+                                    if (message.mine) Icon(Icons.Rounded.Check, contentDescription = "Отправлено", tint = colors.primary, modifier = Modifier.size(13.dp))
                                 }
                             }
                         }
                     }
                 }
             }
-            Text("Демо-режим · сообщения пока не доставляются другим пользователям", Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, textAlign = TextAlign.Center)
+            Text(
+                "Сообщения передаются через сервер; сквозное шифрование пока не реализовано.",
+                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -351,19 +477,10 @@ private fun ChatListItem(chat: ChatPreview, onClick: () -> Unit) {
         androidx.compose.foundation.layout.Spacer(Modifier.width(13.dp))
         Column(Modifier.weight(1f)) {
             Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            androidx.compose.foundation.layout.Spacer(Modifier.height(5.dp))
             Text(chat.lastMessage, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         androidx.compose.foundation.layout.Spacer(Modifier.width(10.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Text(chat.time, style = MaterialTheme.typography.labelSmall, color = if (chat.unread > 0) colors.secondary else colors.onSurfaceVariant)
-            if (chat.unread > 0) {
-                androidx.compose.foundation.layout.Spacer(Modifier.height(7.dp))
-                Box(Modifier.size(22.dp).clip(CircleShape).background(colors.primary), contentAlignment = Alignment.Center) {
-                    Text(chat.unread.toString(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = colors.onPrimary)
-                }
-            }
-        }
+        Text(chat.time, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
     }
 }
 
@@ -378,5 +495,23 @@ private fun Avatar(name: String, modifier: Modifier = Modifier) {
     val index = (name.hashCode() and Int.MAX_VALUE) % palettes.size
     Box(modifier.clip(CircleShape).background(palettes[index].first), contentAlignment = Alignment.Center) {
         Text(name.trim().firstOrNull()?.uppercase() ?: "✿", color = palettes[index].second, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
+    }
+}
+
+private fun displayTime(value: String): String {
+    if (value.isBlank()) return ""
+    val time = value.substringAfter('T', value).take(5)
+    return if (time.matches(Regex("\\d{2}:\\d{2}"))) time else ""
+}
+
+private fun friendlyMessagingError(message: String?): String {
+    val value = message.orEmpty()
+    return when {
+        value.contains("verified_phone_required", true) -> "Сначала войдите с подтверждённым номером телефона."
+        value.contains("mutual_contact_required", true) -> "Сначала оба пользователя должны добавить друг друга в контакты Lotus."
+        value.contains("server_not_configured", true) || value.contains("HTTP 404", true) ->
+            "Сервер чатов ещё не развёрнут. Служебная часть Lotus требует настройки."
+        value.isBlank() -> "Нет связи с сервером. Проверьте интернет и попробуйте ещё раз."
+        else -> value.take(180)
     }
 }
