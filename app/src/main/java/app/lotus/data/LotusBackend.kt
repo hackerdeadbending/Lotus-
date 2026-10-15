@@ -114,6 +114,29 @@ object LotusBackend {
         )
     }
 
+    suspend fun createInvite(accessToken: String): Result<String> = request(
+        path = "/functions/v1/lotus-messaging",
+        body = JSONObject().put("action", "create_invite"),
+        bearer = accessToken
+    ) { json ->
+        json.optString("inviteCode").also { require(it.matches(Regex("[A-F0-9]{24}"))) { "Сервер вернул неверный код приглашения" } }
+    }
+
+    suspend fun acceptInvite(accessToken: String, inviteCode: String): Result<LotusChat> = request(
+        path = "/functions/v1/lotus-messaging",
+        body = JSONObject().put("action", "accept_invite").put("inviteCode", inviteCode.trim()),
+        bearer = accessToken
+    ) { json ->
+        val row = json.optJSONObject("chat") ?: error("Сервер не вернул чат")
+        LotusChat(
+            id = row.optString("id").also { require(it.isNotBlank()) { "Сервер не вернул ID чата" } },
+            peerId = row.optString("peerId"),
+            displayName = row.optString("displayName").ifBlank { "Lotus contact" },
+            lastMessage = row.optString("lastMessage"),
+            lastMessageAt = row.optString("lastMessageAt")
+        )
+    }
+
     suspend fun listChats(accessToken: String): Result<List<LotusChat>> = request(
         path = "/functions/v1/lotus-messaging",
         body = JSONObject().put("action", "list_chats"),
