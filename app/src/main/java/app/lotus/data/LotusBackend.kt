@@ -26,6 +26,13 @@ object LotusBackend {
 
     fun accessToken(context: Context): String? = readSessionValue(context, ACCESS)
 
+    fun userIdFromAccessToken(accessToken: String): String? = runCatching {
+        val parts = accessToken.split(".")
+        require(parts.size == 3)
+        val payload = Base64.decode(parts[1], Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+        JSONObject(String(payload, Charsets.UTF_8)).optString("sub").takeIf { it.isNotBlank() }
+    }.getOrNull()
+
     fun refreshToken(context: Context): String? = readSessionValue(context, REFRESH)
 
     fun saveSession(context: Context, accessToken: String, refreshToken: String?) {
