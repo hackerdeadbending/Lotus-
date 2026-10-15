@@ -234,10 +234,12 @@ Deno.serve(async (req: Request) => {
       const { data: messages, error } = await admin.from("lotus_messages")
         .select("id, sender_id, body, created_at")
         .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true })
+        .order("created_at", { ascending: false })
         .limit(200);
       if (error) return reply({ error: "messages_unavailable" }, 503);
-      return reply({ messages: (messages ?? []).map((message) => ({ ...message, mine: message.sender_id === user.id })) });
+      return reply({
+        messages: (messages ?? []).reverse().map((message) => ({ ...message, mine: message.sender_id === user.id })),
+      });
     }
 
     if (action === "send_message") {
