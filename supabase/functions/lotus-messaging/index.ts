@@ -34,7 +34,7 @@ Deno.serve(async (req: Request) => {
     // still requires reciprocal contact edges below, and contact discovery separately
     // requires a verified phone number in lookup-contact.
 
-    let body: { action?: unknown; contactId?: unknown; conversationId?: unknown; text?: unknown; inviteCode?: unknown };
+    let body: { action?: unknown; contactId?: unknown; conversationId?: unknown; text?: unknown; inviteCode?: unknown; displayName?: unknown; encryptionPublicKey?: unknown };
     try {
       body = await req.json();
     } catch {
@@ -44,13 +44,28 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const action = body.action;
 
+    if (action === "publish_encryption_key") {
+      const publicKey = typeof body.encryptionPublicKey === "string" ? body.encryptionPublicKey : "";
+      if (!/^[A-Za-z0-9+/]{80,200}={0,2}$/.test(publicKey)) {
+        return reply({ error: "encryption_public_key_invalid" }, 400);
+      }
+      const { error } = await admin.from("lotus_profiles")
+        .update({ encryption_public_key: publicKey, updated_at: new Date().toISOString() })
+        .eq("user_id", user.id);
+      if (error) return reply({ error: "encryption_key_publish_failed" }, 503);
+      return reply({ ok: true });
+    }
+
     if (action === "get_profile") {
       const { data: profile, error } = await admin.from("lotus_profiles")
-        .select("display_name")
+        .select("display_name, encryption_public_key")
         .eq("user_id", user.id)
         .maybeSingle();
       if (error) return reply({ error: "profile_unavailable" }, 503);
-      return reply({ displayName: profile?.display_name ?? "Lotus user" });
+      return reply({
+        displayName: profile?.display_name ?? "Lotus user",
+        encryptionPublicKey: profile?.encryption_public_key ?? null,
+      });
     }
 
     if (action === "update_profile") {
@@ -119,7 +134,7 @@ Deno.serve(async (req: Request) => {
       if (conversationError || !conversation) return reply({ error: "chat_create_failed" }, 503);
 
       const { data: profile } = await admin.from("lotus_profiles")
-        .select("display_name")
+        .select("display_name, encryption_public_key")
         .eq("user_id", invite.creator_id)
         .maybeSingle();
       return reply({
@@ -127,6 +142,7 @@ Deno.serve(async (req: Request) => {
           id: conversation.id,
           peerId: invite.creator_id,
           displayName: profile?.display_name ?? "Lotus contact",
+          peerPublicKey: profile?.encryption_public_key ?? null,
           lastMessage: "",
           lastMessageAt: conversation.created_at,
         },
@@ -145,7 +161,7 @@ Deno.serve(async (req: Request) => {
       for (const conversation of conversations ?? []) {
         const peerId = conversation.participant_a === user.id ? conversation.participant_b : conversation.participant_a;
         const [{ data: profile }, { data: lastMessage }] = await Promise.all([
-          admin.from("lotus_profiles").select("display_name").eq("user_id", peerId).maybeSingle(),
+          admin.from("lotus_profiles").select("display_name, encryption_public_key").eq("user_id", peerId).maybeSingle(),
           admin.from("lotus_messages").select("body, created_at").eq("conversation_id", conversation.id)
             .order("created_at", { ascending: false }).limit(1).maybeSingle(),
         ]);
@@ -153,6 +169,7 @@ Deno.serve(async (req: Request) => {
           id: conversation.id,
           peerId,
           displayName: profile?.display_name ?? "Lotus contact",
+          peerPublicKey: profile?.encryption_public_key ?? null,
           lastMessage: lastMessage?.body ?? "",
           lastMessageAt: lastMessage?.created_at ?? conversation.created_at,
         });
@@ -167,7 +184,7 @@ Deno.serve(async (req: Request) => {
       }
       if (contactId === user.id) return reply({ error: "cannot_chat_with_self" }, 400);
 
-      const { data: target } = await admin.from("lotus_profiles").select("user_id, phone_verified, display_name")
+      const { data: target } = await admin.from("lotus_profiles").select("user_id, phone_verified, display_name, encryption_public_key")
         .eq("user_id", contactId).eq("phone_verified", true).maybeSingle();
       if (!target) return reply({ error: "contact_unavailable" }, 404);
 
@@ -187,6 +204,7 @@ Deno.serve(async (req: Request) => {
           id: conversation.id,
           peerId: contactId,
           displayName: target.display_name ?? "Lotus contact",
+          peerPublicKey: target.encryption_public_key ?? null,
           lastMessage: "",
           lastMessageAt: conversation.created_at,
         },
