@@ -31,6 +31,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import android.graphics.Bitmap
 import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -219,6 +223,11 @@ fun ContactDiscoveryDialog(accessToken: String, onDismiss: () -> Unit, onChatSta
                                 Text("Ваш код приглашения", fontWeight = FontWeight.SemiBold)
                                 Text(code, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 Text("Одноразовый · действует 7 дней", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                                TextButton(onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("Lotus invite code", code))
+                                    Toast.makeText(context, "Код скопирован", Toast.LENGTH_SHORT).show()
+                                }) { Text("Копировать код") }
                                 TextButton(onClick = { createPersonalInvite(share = true) }, enabled = !creatingInvite) {
                                     Text("Создать новый код и поделиться")
                                 }
