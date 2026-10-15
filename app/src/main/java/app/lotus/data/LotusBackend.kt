@@ -114,6 +114,14 @@ object LotusBackend {
         )
     }
 
+    suspend fun getDisplayName(accessToken: String): Result<String> = request(
+        path = "/functions/v1/lotus-messaging",
+        body = JSONObject().put("action", "get_profile"),
+        bearer = accessToken
+    ) { json ->
+        json.optString("displayName").ifBlank { "Lotus user" }
+    }
+
     suspend fun updateDisplayName(accessToken: String, displayName: String): Result<String> = request(
         path = "/functions/v1/lotus-messaging",
         body = JSONObject().put("action", "update_profile").put("displayName", displayName.trim()),
