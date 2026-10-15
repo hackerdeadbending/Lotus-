@@ -67,8 +67,13 @@ fun LotusApp() {
         } else {
             encryptionReady = false
             encryptionError = null
+            val userId = LotusBackend.userIdFromAccessToken(token)
+            if (userId.isNullOrBlank()) {
+                encryptionError = "Не удалось определить аккаунт для ключа шифрования."
+                return@LaunchedEffect
+            }
             val keyResult = runCatching {
-                withContext(Dispatchers.IO) { LotusCrypto.getOrCreatePublicKey(context) }
+                withContext(Dispatchers.IO) { LotusCrypto.getOrCreatePublicKey(context, userId) }
             }
             if (keyResult.isSuccess) {
                 val publicKey = keyResult.getOrThrow()
