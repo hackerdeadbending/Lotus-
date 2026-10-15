@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +30,16 @@ fun LotusApp() {
     val context = LocalContext.current
     var showSplash by remember { mutableStateOf(true) }
     var accessToken by remember { mutableStateOf(LotusBackend.accessToken(context)) }
+
+    LaunchedEffect(Unit) {
+        val refresh = LotusBackend.refreshToken(context)
+        if (!refresh.isNullOrBlank()) {
+            LotusBackend.refreshSession(refresh).onSuccess { session ->
+                LotusBackend.saveSession(context, session.first, session.second ?: refresh)
+                accessToken = session.first
+            }
+        }
+    }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Box(
