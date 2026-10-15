@@ -1,5 +1,9 @@
 name: Build Lotus APK
 
+concurrency:
+  group: lotus-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [ main ]
