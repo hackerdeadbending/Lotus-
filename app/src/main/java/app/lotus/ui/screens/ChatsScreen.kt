@@ -1,6 +1,7 @@
 package app.lotus.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -476,17 +477,41 @@ private fun ConversationScreen(
 private fun ChatListItem(chat: ChatPreview, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick).padding(horizontal = 9.dp, vertical = 11.dp),
+        Modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .clip(RoundedCornerShape(22.dp))
+            .background(colors.surface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Avatar(chat.name, Modifier.size(56.dp))
+        Avatar(chat.name, Modifier.size(54.dp))
         androidx.compose.foundation.layout.Spacer(Modifier.width(13.dp))
-        Column(Modifier.weight(1f)) {
-            Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(chat.lastMessage, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                chat.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                chat.lastMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
         androidx.compose.foundation.layout.Spacer(Modifier.width(10.dp))
-        Text(chat.time, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(chat.time, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+            Box(
+                Modifier.size(7.dp).clip(CircleShape).background(colors.secondary.copy(alpha = 0.85f))
+            )
+        }
     }
 }
 
