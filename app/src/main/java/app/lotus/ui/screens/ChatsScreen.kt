@@ -698,7 +698,9 @@ private fun EncryptionStatusBanner(error: String?, onRetry: () -> Unit) {
                     color = colors.onErrorContainer
                 )
             }
-            TextButton(onClick = onRetry) { Text("Повторить") }
+            if (error?.contains("уже зарегистрирован ключ другого устройства", true) != true) {
+                TextButton(onClick = onRetry) { Text("Повторить") }
+            }
         }
     }
 }
