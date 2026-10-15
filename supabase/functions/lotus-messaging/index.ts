@@ -44,6 +44,15 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const action = body.action;
 
+    if (action === "get_profile") {
+      const { data: profile, error } = await admin.from("lotus_profiles")
+        .select("display_name")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error) return reply({ error: "profile_unavailable" }, 503);
+      return reply({ displayName: profile?.display_name ?? "Lotus user" });
+    }
+
     if (action === "update_profile") {
       const displayName = typeof body.displayName === "string" ? body.displayName.trim().replace(/\s+/g, " ") : "";
       if (displayName.length < 2 || displayName.length > 40) {
