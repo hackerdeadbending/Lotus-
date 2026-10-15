@@ -18,6 +18,9 @@ object LotusBackend {
     fun accessToken(context: Context): String? =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(ACCESS, null)
 
+    fun refreshToken(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(REFRESH, null)
+
     fun saveSession(context: Context, accessToken: String, refreshToken: String?) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString(ACCESS, accessToken)
@@ -66,6 +69,21 @@ object LotusBackend {
         require(access.isNotBlank()) { "Сервер не вернул токен авторизации" }
         access to json.optString("refresh_token").takeIf { it.isNotBlank() }
     }
+
+    suspend fun refreshSession(refreshToken: String): Result<Pair<String, String?>> = request(
+        path = "/auth/v1/token?grant_type=refresh_token",
+        method = "POST",
+        body = JSONObject().put("refresh_token", refreshToken)
+    ) { json ->
+        val access = json.optString("access_token")
+        require(access.isNotBlank()) { "Сервер не вернул токен авторизации" }
+        access to json.optString("refresh_token").takeIf { it.isNotBlank() }
+    }
+
+    suspend fun sendPasswordRecovery(email: String): Result<Unit> = request(
+        path = "/auth/v1/recover",
+        body = JSONObject().put("email", email.trim())
+    ) { Unit }
 
     suspend fun sendEmailOtp(email: String): Result<Unit> = request(
         path = "/auth/v1/otp",
