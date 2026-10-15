@@ -63,7 +63,13 @@ fun LotusApp() {
                         accessToken = access
                     }
                 } else {
-                    ChatsScreen(accessToken = accessToken.orEmpty())
+                    ChatsScreen(
+                        accessToken = accessToken.orEmpty(),
+                        onLogout = {
+                            LotusBackend.clearSession(context)
+                            accessToken = null
+                        }
+                    )
                 }
             }
         }
