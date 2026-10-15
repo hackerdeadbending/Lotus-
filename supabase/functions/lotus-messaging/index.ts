@@ -234,7 +234,8 @@ Deno.serve(async (req: Request) => {
 
     if (action === "send_message") {
       const text = typeof body.text === "string" ? body.text.trim() : "";
-      if (!text || text.length > 4000) return reply({ error: "message_length_invalid" }, 400);
+      if (!text.startsWith("LOTUS1:")) return reply({ error: "encryption_required" }, 400);
+      if (text.length > 12000) return reply({ error: "message_length_invalid" }, 400);
       const { data: message, error } = await admin.from("lotus_messages")
         .insert({ conversation_id: conversationId, sender_id: user.id, body: text })
         .select("id, sender_id, body, created_at").single();
