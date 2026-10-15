@@ -87,7 +87,8 @@ object LotusBackend {
     ) { json ->
         ContactResult(
             mutual = json.optBoolean("mutual", false),
-            displayName = json.optJSONObject("contact")?.optString("displayName")
+            displayName = json.optJSONObject("contact")?.optString("displayName"),
+            contactId = json.optJSONObject("contact")?.optString("id")
         )
     }
 
@@ -140,7 +141,8 @@ object LotusBackend {
                 id = id,
                 senderId = row.optString("sender_id"),
                 body = row.optString("body"),
-                createdAt = row.optString("created_at")
+                createdAt = row.optString("created_at"),
+                mine = row.optBoolean("mine", false)
             )
         }
     }
@@ -158,7 +160,8 @@ object LotusBackend {
             id = row.optString("id").also { require(it.isNotBlank()) { "Сервер не вернул ID сообщения" } },
             senderId = row.optString("sender_id"),
             body = row.optString("body"),
-            createdAt = row.optString("created_at")
+            createdAt = row.optString("created_at"),
+            mine = true
         )
     }
 
@@ -215,5 +218,6 @@ data class LotusMessage(
     val id: String,
     val senderId: String,
     val body: String,
-    val createdAt: String
+    val createdAt: String,
+    val mine: Boolean = false
 )
