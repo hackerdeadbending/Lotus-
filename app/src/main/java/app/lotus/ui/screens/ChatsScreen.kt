@@ -58,12 +58,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.lotus.data.LotusBackend
+import app.lotus.data.LotusCrypto
 import app.lotus.data.LotusChat
 import app.lotus.data.LotusMessage
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -75,7 +79,8 @@ private data class ChatPreview(
     val name: String,
     val lastMessage: String,
     val time: String,
-    val subtitle: String = "Lotus"
+    val subtitle: String = "Lotus",
+    val peerPublicKey: String? = null
 )
 
 private data class LocalMessage(
@@ -86,7 +91,13 @@ private data class LocalMessage(
 )
 
 @Composable
-fun ChatsScreen(accessToken: String, onLogout: () -> Unit) {
+fun ChatsScreen(
+    accessToken: String,
+    encryptionReady: Boolean,
+    encryptionError: String?,
+    onRetryEncryption: () -> Unit,
+    onLogout: () -> Unit
+) {
     var chats by remember { mutableStateOf<List<ChatPreview>>(emptyList()) }
     var selectedChat by remember { mutableStateOf<ChatPreview?>(null) }
     var messages by remember { mutableStateOf<List<LocalMessage>>(emptyList()) }
@@ -103,16 +114,25 @@ fun ChatsScreen(accessToken: String, onLogout: () -> Unit) {
     var sending by remember { mutableStateOf(false) }
     var backendError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
 
-    fun toPreview(chat: LotusChat) = ChatPreview(
-        id = chat.id,
-        peerId = chat.peerId,
-        name = chat.displayName,
-        lastMessage = chat.lastMessage.ifBlank { "Начните общение" },
-        time = displayTime(chat.lastMessageAt),
-        subtitle = "Личный чат"
-    )
+    fun toPreview(chat: LotusChat): ChatPreview {
+        val lastMessage = chat.lastMessage.ifBlank { "Начните общение" }
+        val readableLastMessage = if (lastMessage.startsWith("LOTUS1:")) {
+            runCatching { LotusCrypto.decrypt(context, chat.id, chat.peerPublicKey, lastMessage) }
+                .getOrElse { "Зашифрованное сообщение" }
+        } else lastMessage
+        return ChatPreview(
+            id = chat.id,
+            peerId = chat.peerId,
+            name = chat.displayName,
+            lastMessage = readableLastMessage,
+            time = displayTime(chat.lastMessageAt),
+            subtitle = "Личный чат",
+            peerPublicKey = chat.peerPublicKey
+        )
+    }
 
     LaunchedEffect(accessToken) {
         while (true) {
@@ -137,7 +157,10 @@ fun ChatsScreen(accessToken: String, onLogout: () -> Unit) {
             LotusBackend.listMessages(accessToken, conversationId)
                 .onSuccess { result ->
                     messages = result.map { message ->
-                        LocalMessage(message.id, message.body, message.mine, displayTime(message.createdAt))
+                        val readableBody = runCatching {
+                            LotusCrypto.decrypt(context, conversationId, selectedChat?.peerPublicKey, message.body)
+                        }.getOrElse { "Не удалось расшифровать сообщение" }
+                        LocalMessage(message.id, readableBody, message.mine, displayTime(message.createdAt))
                     }
                     backendError = null
                     loadingMessages = false
@@ -158,6 +181,9 @@ fun ChatsScreen(accessToken: String, onLogout: () -> Unit) {
             draft = draft,
             sending = sending,
             loading = loadingMessages,
+            encryptionReady = encryptionReady,
+            encryptionError = encryptionError,
+            onRetryEncryption = onRetryEncryption,
             onDraftChange = { draft = it },
             onBack = {
                 selectedChat = null
@@ -169,14 +195,25 @@ fun ChatsScreen(accessToken: String, onLogout: () -> Unit) {
                 if (text.isNotEmpty() && !sending) {
                     sending = true
                     scope.launch {
-                        LotusBackend.sendMessage(accessToken, activeChat.id, text)
+                        val encryptedResult = runCatching {
+                            withContext(Dispatchers.IO) {
+                                LotusCrypto.encrypt(context, activeChat.id, activeChat.peerPublicKey, text)
+                            }
+                        }
+                        if (encryptedResult.isFailure) {
+                            backendError = encryptedResult.exceptionOrNull()?.message
+                                ?: "Не удалось зашифровать сообщение."
+                            sending = false
+                            return@launch
+                        }
+                        LotusBackend.sendMessage(accessToken, activeChat.id, encryptedResult.getOrThrow())
                             .onSuccess { sent ->
                                 messages = messages + LocalMessage(
-                                    sent.id, sent.body, true, displayTime(sent.createdAt)
+                                    sent.id, text, true, displayTime(sent.createdAt)
                                 )
                                 chats = chats.map { chat ->
                                     if (chat.id == activeChat.id) chat.copy(
-                                        lastMessage = sent.body,
+                                        lastMessage = text,
                                         time = displayTime(sent.createdAt)
                                     ) else chat
                                 }
@@ -423,6 +460,9 @@ private fun ConversationScreen(
     draft: String,
     sending: Boolean,
     loading: Boolean,
+    encryptionReady: Boolean,
+    encryptionError: String?,
+    onRetryEncryption: () -> Unit,
     onDraftChange: (String) -> Unit,
     onBack: () -> Unit,
     onSend: () -> Unit
@@ -450,7 +490,7 @@ private fun ConversationScreen(
                     androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
                     IconButton(
                         onClick = onSend,
-                        enabled = draft.isNotBlank() && !sending,
+                        enabled = draft.isNotBlank() && !sending && encryptionReady,
                         modifier = Modifier.size(50.dp).clip(CircleShape).background(colors.primary)
                     ) {
                         if (sending) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
