@@ -187,7 +187,7 @@ fun ChatsScreen(
             encryptionReady = encryptionReady,
             encryptionError = encryptionError,
             onRetryEncryption = onRetryEncryption,
-            onDraftChange = { draft = it },
+            onDraftChange = { draft = it.take(4000) },
             onBack = {
                 selectedChat = null
                 draft = ""
@@ -496,7 +496,8 @@ private fun ConversationScreen(
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Сообщение…") },
                         shape = RoundedCornerShape(24.dp),
-                        maxLines = 4
+                        maxLines = 4,
+                        supportingText = { Text("${draft.length}/4000") }
                     )
                     androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
                     IconButton(
